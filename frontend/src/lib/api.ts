@@ -1,4 +1,5 @@
-import { clearToken, getToken } from "./auth";
+import { clearToken, getToken, isDemoSession } from "./auth";
+import { demoApi } from "./demo";
 import type {
   ApiResponse,
   AssessmentCreateRequest,
@@ -101,6 +102,7 @@ export const api = {
   },
 
   createAssessment(payload: AssessmentCreateRequest): Promise<AssessmentResponse> {
+    if (isDemoSession()) return demoApi.createAssessment(payload);
     return request<AssessmentResponse>("/api/life/assessments", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -108,10 +110,12 @@ export const api = {
   },
 
   getMyProfile(): Promise<UserProfile> {
+    if (isDemoSession()) return demoApi.getMyProfile();
     return request<UserProfile>("/api/users/me/profile");
   },
 
   updateMyProfile(payload: UserProfileUpdateRequest): Promise<UserProfile> {
+    if (isDemoSession()) return demoApi.updateMyProfile(payload);
     return request<UserProfile>("/api/users/me/profile", {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -119,6 +123,7 @@ export const api = {
   },
 
   agreeTerms(payload: UserAgreementRequest): Promise<UserAgreementResponse> {
+    if (isDemoSession()) return demoApi.agreeTerms(payload);
     return request<UserAgreementResponse>("/api/users/me/agreement", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -126,6 +131,7 @@ export const api = {
   },
 
   analyze(assessmentId: number): Promise<ReportPreview> {
+    if (isDemoSession()) return demoApi.analyze(assessmentId);
     return request<ReportPreview>(
       `/api/life/assessments/${assessmentId}/analyze`,
       { method: "POST" },
@@ -133,18 +139,22 @@ export const api = {
   },
 
   getPreview(reportId: number): Promise<ReportPreview> {
+    if (isDemoSession()) return demoApi.getPreview(reportId);
     return request<ReportPreview>(`/api/life/reports/${reportId}/preview`);
   },
 
   getLatestChatReport(): Promise<LatestChatReport> {
+    if (isDemoSession()) return demoApi.getLatestChatReport();
     return request<LatestChatReport>("/api/life/reports/latest-chat-target");
   },
 
   getLatestReportRoute(): Promise<LatestReportRoute> {
+    if (isDemoSession()) return demoApi.getLatestReportRoute();
     return request<LatestReportRoute>("/api/life/reports/latest-route-target");
   },
 
   completePayment(reportId: number): Promise<PaymentResponse> {
+    if (isDemoSession()) return demoApi.completePayment(reportId);
     return request<PaymentResponse>(
       `/api/life/reports/${reportId}/payments/mock-complete`,
       { method: "POST" },
@@ -155,6 +165,7 @@ export const api = {
     reportId: number,
     payload: TossPaymentConfirmRequest,
   ): Promise<PaymentResponse> {
+    if (isDemoSession()) return demoApi.confirmTossPayment(reportId);
     return request<PaymentResponse>(
       `/api/life/reports/${reportId}/payments/toss/confirm`,
       { method: "POST", body: JSON.stringify(payload) },
@@ -162,6 +173,7 @@ export const api = {
   },
 
   getReport(reportId: number): Promise<ReportDetail> {
+    if (isDemoSession()) return demoApi.getReport(reportId);
     return request<ReportDetail>(`/api/life/reports/${reportId}`);
   },
 
@@ -169,6 +181,7 @@ export const api = {
     reportId: number,
     payload: ReportPdfEstimateRequest,
   ): Promise<ReportDetail> {
+    if (isDemoSession()) return demoApi.getPdfReport(reportId, payload);
     return request<ReportDetail>(`/api/life/reports/${reportId}/pdf-estimate`, {
       method: "POST",
       body: JSON.stringify(payload),
@@ -176,6 +189,7 @@ export const api = {
   },
 
   fetchDocuments(reportId: number): Promise<DocumentFetchResponse> {
+    if (isDemoSession()) return demoApi.fetchDocuments(reportId);
     return request<DocumentFetchResponse>(
       `/api/life/reports/${reportId}/documents/fetch`,
       { method: "POST" },
@@ -186,6 +200,7 @@ export const api = {
     reportId: number,
     content: string,
   ): Promise<ChatMessageCreateResponse> {
+    if (isDemoSession()) return demoApi.sendChatMessage(reportId, content);
     return request<ChatMessageCreateResponse>(
       `/api/life/reports/${reportId}/chat/messages`,
       { method: "POST", body: JSON.stringify({ content }) },
@@ -193,6 +208,7 @@ export const api = {
   },
 
   getChatMessages(reportId: number): Promise<ChatMessagesResponse> {
+    if (isDemoSession()) return demoApi.getChatMessages(reportId);
     return request<ChatMessagesResponse>(
       `/api/life/reports/${reportId}/chat/messages`,
     );
@@ -202,6 +218,7 @@ export const api = {
     category?: CommunityCategory | "ALL",
     mode: "latest" | "popular" = "latest",
   ): Promise<CommunityPostSummary[]> {
+    if (isDemoSession()) return demoApi.getCommunityPosts(category, mode);
     const params = new URLSearchParams({ size: "50" });
     if (category && category !== "ALL") params.set("category", category);
     const path =
@@ -212,6 +229,7 @@ export const api = {
   createCommunityPost(
     payload: CommunityPostCreateRequest,
   ): Promise<CommunityPostDetail> {
+    if (isDemoSession()) return demoApi.createCommunityPost(payload);
     return request<CommunityPostDetail>("/api/community/posts", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -219,22 +237,26 @@ export const api = {
   },
 
   getCommunityPost(postId: number): Promise<CommunityPostDetail> {
+    if (isDemoSession()) return demoApi.getCommunityPost(postId);
     return request<CommunityPostDetail>(`/api/community/posts/${postId}`);
   },
 
   deleteCommunityPost(postId: number): Promise<boolean> {
+    if (isDemoSession()) return demoApi.deleteCommunityPost(postId);
     return request<boolean>(`/api/community/posts/${postId}`, {
       method: "DELETE",
     });
   },
 
   likeCommunityPost(postId: number): Promise<CommunityLikeResponse> {
+    if (isDemoSession()) return demoApi.likeCommunityPost(postId);
     return request<CommunityLikeResponse>(`/api/community/posts/${postId}/likes`, {
       method: "POST",
     });
   },
 
   unlikeCommunityPost(postId: number): Promise<CommunityLikeResponse> {
+    if (isDemoSession()) return demoApi.unlikeCommunityPost(postId);
     return request<CommunityLikeResponse>(`/api/community/posts/${postId}/likes`, {
       method: "DELETE",
     });
@@ -244,6 +266,7 @@ export const api = {
     postId: number,
     payload: CommunityCommentCreateRequest,
   ): Promise<CommunityComment> {
+    if (isDemoSession()) return demoApi.createCommunityComment(postId, payload);
     return request<CommunityComment>(`/api/community/posts/${postId}/comments`, {
       method: "POST",
       body: JSON.stringify(payload),
@@ -251,6 +274,7 @@ export const api = {
   },
 
   deleteCommunityComment(postId: number, commentId: number): Promise<boolean> {
+    if (isDemoSession()) return demoApi.deleteCommunityComment(postId, commentId);
     return request<boolean>(
       `/api/community/posts/${postId}/comments/${commentId}`,
       { method: "DELETE" },

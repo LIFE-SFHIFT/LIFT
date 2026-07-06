@@ -1,9 +1,10 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { api } from "@/lib/api";
+import { startDemoSession } from "@/lib/auth";
 
 const FEATURES = [
   {
@@ -27,6 +28,7 @@ const FEATURES = [
 ];
 
 function LoginInner() {
+  const router = useRouter();
   const params = useSearchParams();
   const [loading, setLoading] = useState<"kakao" | "naver" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,11 @@ function LoginInner() {
     setLoading(provider);
     setError(null);
     api.startSocialLogin(provider);
+  }
+
+  function handleDemoLogin() {
+    startDemoSession();
+    router.replace("/onboarding/life-event");
   }
 
   return (
@@ -91,8 +98,17 @@ function LoginInner() {
           <span className="btn-ico">Ⓝ</span>
           {loading === "naver" ? "로그인 중…" : "네이버로 시작하기"}
         </button>
+        <button
+          type="button"
+          className="btn demo"
+          disabled={loading !== null}
+          onClick={handleDemoLogin}
+        >
+          <span className="btn-ico">▶</span>
+          데모용 로그인으로 바로 체험하기
+        </button>
         <p className="quota" style={{ marginTop: 4 }}>
-          카카오·네이버 모두 실제 소셜 로그인으로 연결됩니다.
+          데모용 로그인은 이 브라우저 안에만 저장되고 DB에는 저장되지 않습니다.
         </p>
       </div>
     </>

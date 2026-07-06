@@ -290,6 +290,15 @@ p.page-sub {
   background: #02b351;
 }
 
+.btn.demo {
+  background: #111827;
+  color: #fff;
+}
+
+.btn.demo:hover {
+  background: #030712;
+}
+
 .sticky-cta {
   position: sticky;
   bottom: 0;
