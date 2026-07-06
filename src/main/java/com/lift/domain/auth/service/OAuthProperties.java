@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 public class OAuthProperties {
 
     private String baseUrl = "http://localhost:8080";
+    private String frontendBaseUrl = "http://localhost:3000";
 
     /**
      * true면 client-id가 설정되지 않은 provider에 한해 개발용 모의 로그인을 허용한다.

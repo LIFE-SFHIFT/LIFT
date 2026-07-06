@@ -20,8 +20,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private static final String DEFAULT_LOCAL_FRONTEND_URL = "http://localhost:3000";
-
     private final OAuthProperties oAuthProperties;
     private final UserAccountStore userAccountStore;
     private final AuthTokenService authTokenService;
@@ -128,7 +126,7 @@ public class AuthService {
             return registration.getRedirectUri();
         }
 
-        return DEFAULT_LOCAL_FRONTEND_URL + "/login/callback/" + provider.getPath();
+        return oAuthProperties.getFrontendBaseUrl() + "/login/callback/" + provider.getPath();
     }
 
     private AuthNextStep resolveNextStep(UserAccount userAccount) {

@@ -16,6 +16,8 @@ services:
         value: https://your-lift-frontend.netlify.app
       - key: LIFT_BASE_URL
         value: https://lift-api.onrender.com
+      - key: LIFT_FRONTEND_BASE_URL
+        value: https://your-lift-frontend.netlify.app
       - key: OAUTH_MOCK_ENABLED
         value: true
       - key: GOV24_PUBLIC_SERVICE_ENABLED
