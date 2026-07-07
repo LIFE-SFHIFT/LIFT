@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { api } from "@/lib/api";
@@ -108,7 +109,8 @@ function LoginInner() {
           데모용 로그인으로 바로 체험하기
         </button>
         <p className="quota" style={{ marginTop: 4 }}>
-          데모용 로그인은 이 브라우저 안에만 저장되고 DB에는 저장되지 않습니다.
+          계속하면 <Link href="/terms">이용약관</Link>과{" "}
+          <Link href="/privacy">개인정보처리방침</Link>에 동의하게 됩니다.
         </p>
       </div>
     </>

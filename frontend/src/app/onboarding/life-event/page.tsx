@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
@@ -86,8 +87,9 @@ function LifeEventInner() {
           style={{ marginTop: 3 }}
         />
         <span>
-          서비스 이용약관 및 개인정보 처리방침에 동의합니다. 진단 결과는 참고용이며 정확한 자격은
-          관할 기관에서 확인해야 합니다.
+          <Link href="/terms">서비스 이용약관</Link> 및{" "}
+          <Link href="/privacy">개인정보 처리방침</Link>에 동의합니다. 진단 결과는
+          참고용이며 정확한 자격은 관할 기관에서 확인해야 합니다.
         </span>
       </label>
 

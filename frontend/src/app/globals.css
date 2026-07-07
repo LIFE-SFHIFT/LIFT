@@ -388,6 +388,51 @@ p.page-sub {
   text-decoration: underline;
 }
 
+.legal-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.legal-section {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.legal-section h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.legal-section p {
+  margin: 0;
+  color: var(--text-sub);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.legal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.legal-actions a,
+.quota a {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.legal-actions a:hover,
+.quota a:hover {
+  text-decoration: underline;
+}
+
 .summary-hero {
   background: linear-gradient(135deg, #2f6bff, #5b8bff);
   color: #fff;

@@ -21,13 +21,25 @@ services:
       - key: SPRING_JPA_HIBERNATE_DDL_AUTO
         value: update
       - key: LIFT_CORS_ALLOWED_ORIGINS
-        value: https://your-lift-frontend.netlify.app
+        value: https://life-shift.netlify.app
       - key: LIFT_BASE_URL
         value: https://lift-api.onrender.com
       - key: LIFT_FRONTEND_BASE_URL
-        value: https://your-lift-frontend.netlify.app
+        value: https://life-shift.netlify.app
       - key: OAUTH_MOCK_ENABLED
-        value: true
+        value: false
+      - key: KAKAO_CLIENT_ID
+        sync: false
+      - key: KAKAO_CLIENT_SECRET
+        sync: false
+      - key: KAKAO_REDIRECT_URI
+        value: https://life-shift.netlify.app/login/callback/kakao
+      - key: NAVER_CLIENT_ID
+        sync: false
+      - key: NAVER_CLIENT_SECRET
+        sync: false
+      - key: NAVER_REDIRECT_URI
+        value: https://life-shift.netlify.app/login/callback/naver
       - key: GOV24_PUBLIC_SERVICE_ENABLED
         value: false
       - key: TOSS_PAYMENTS_ENABLED
