@@ -44,6 +44,7 @@ public record LifeAssessmentCreateReqDTO(
         @Max(value = 100_000_000, message = "월 평균임금을 확인해주세요.")
         Integer monthlyAverageWage,
 
+        @NotNull(message = "나이는 필수입니다.")
         @Min(value = 0, message = "나이는 0 이상이어야 합니다.")
         @Max(value = 120, message = "나이를 확인해주세요.")
         Integer age,

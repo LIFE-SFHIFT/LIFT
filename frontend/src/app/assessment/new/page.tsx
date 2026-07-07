@@ -153,7 +153,7 @@ function AssessmentInner() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!eventType) return;
-    if (!resignationReason || !nextJobStatus || insuranceMonths === null || !incomeStatus) {
+    if (!resignationReason || !nextJobStatus || insuranceMonths === null || !incomeStatus || !age) {
       setError("필수 항목을 모두 선택해 주세요.");
       return;
     }
@@ -205,7 +205,8 @@ function AssessmentInner() {
     Boolean(resignationReason) &&
     Boolean(nextJobStatus) &&
     insuranceMonths !== null &&
-    Boolean(incomeStatus);
+    Boolean(incomeStatus) &&
+    Boolean(age);
 
   return (
     <form onSubmit={handleSubmit}>
@@ -267,14 +268,17 @@ function AssessmentInner() {
         <div className="wage-head">
           <span className="wage-badge">📌 리포트 정확도 높이기</span>
           <p className="wage-help">
-            나이와 근속연수는 실업급여 기간·퇴직금 판단에만 사용돼요. 월급은 민감한
-            정보라 PDF 저장 단계에서만 따로 입력받습니다. (선택)
+            나이는 실업급여 기간·퇴직금 판단은 물론, 나이 조건이 있는 공공서비스 혜택
+            매칭을 확인하기 위해 필수로 입력해 주세요. 근속연수와 월급은 선택이며, 월급은
+            민감한 정보라 PDF 저장 단계에서만 따로 입력받습니다.
           </p>
         </div>
 
         <div className="wage-row">
           <div className="form-block">
-            <label className="form-label">나이 (만)</label>
+            <label className="form-label">
+              나이 (만) <span className="wage-badge">필수</span>
+            </label>
             <div className="won-input">
               <input
                 className="text-input"
@@ -287,7 +291,7 @@ function AssessmentInner() {
             </div>
           </div>
           <div className="form-block">
-            <label className="form-label">근속연수</label>
+            <label className="form-label">근속연수 (선택)</label>
             <div className="won-input">
               <input
                 className="text-input"

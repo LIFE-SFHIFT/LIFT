@@ -91,6 +91,11 @@ const PUBLIC_GROUP_LABEL: Record<PublicBenefit["priorityGroup"], string> = {
   LOW: "후순위",
 };
 
+const REQUIRED_FIELD_LABEL: Record<string, string> = {
+  age: "나이",
+  tenureYears: "근속연수",
+};
+
 function docKey(itemId: number, documentName: string) {
   return `${itemId}::${documentName}`;
 }
@@ -231,6 +236,7 @@ function PublicBenefitSection({ benefits }: { benefits: PublicBenefit[] }) {
           넓게 찾았어요.
         </p>
       </div>
+      <span className="pb-swipe-hint">← 옆으로 넘겨서 더 보기 →</span>
 
       <div className="pb-grid">
         {benefits.map((benefit, index) => (
@@ -300,6 +306,139 @@ function PublicBenefitSection({ benefits }: { benefits: PublicBenefit[] }) {
   );
 }
 
+function PendingBenefitSection({
+  benefits,
+  onSupplementClick,
+}: {
+  benefits: PublicBenefit[];
+  onSupplementClick: () => void;
+}) {
+  if (!benefits.length) return null;
+
+  return (
+    <section className="public-benefits pending-benefits">
+      <div className="pb-head">
+        <div>
+          <span className="pb-kicker">정보 입력 시 확인 가능</span>
+          <h2>추가 정보를 입력하면 확인 가능한 혜택</h2>
+        </div>
+        <p>
+          나이·근속연수 조건이 있는 혜택이에요. 정보를 입력하면 자격을 확정해 최종
+          목록에 포함해 드려요.
+        </p>
+      </div>
+      <span className="pb-swipe-hint">← 옆으로 넘겨서 더 보기 →</span>
+
+      <div className="pb-grid">
+        {benefits.map((benefit, index) => (
+          <article className="pb-card pending" key={`${benefit.sourceId ?? benefit.title}-${index}`}>
+            <h3>{benefit.title}</h3>
+            <p className="pb-reason">{benefit.reason}</p>
+            {benefit.missingInputs.length > 0 && (
+              <div className="pb-missing">
+                {benefit.missingInputs.map((f) => REQUIRED_FIELD_LABEL[f] ?? f).join(", ")}을(를)
+                입력하면 확인할 수 있어요.
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
+
+      <button type="button" className="btn secondary" onClick={onSupplementClick}>
+        정보 입력하고 확인하기
+      </button>
+    </section>
+  );
+}
+
+function SupplementInputModal({
+  requiredForMatching,
+  submitting,
+  errorMessage,
+  onClose,
+  onSubmit,
+}: {
+  requiredForMatching: string[];
+  submitting: boolean;
+  errorMessage: string | null;
+  onClose: () => void;
+  onSubmit: (age: string, tenureYears: string) => void;
+}) {
+  const [age, setAge] = useState("");
+  const [tenureYears, setTenureYears] = useState("");
+  const needsAge = requiredForMatching.includes("age");
+  const needsTenure = requiredForMatching.includes("tenureYears");
+
+  return (
+    <div className="idv-overlay" onClick={onClose}>
+      <div className="idv-sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="idv-grip" />
+        <div className="idv-head">
+          <div className="idv-brand">
+            <span className="idv-shield">🪪</span>
+            <div>
+              <div className="idv-brand-title">추가 정보 입력</div>
+              <div className="idv-brand-sub">더 정확한 혜택 매칭을 위해 필요해요</div>
+            </div>
+          </div>
+          <button type="button" className="idv-close" onClick={onClose} aria-label="닫기">
+            ✕
+          </button>
+        </div>
+
+        {needsAge && (
+          <>
+            <label className="idv-label">
+              나이 (만) <span className="wage-badge">필수</span>
+            </label>
+            <div className="won-input">
+              <input
+                className="text-input"
+                inputMode="numeric"
+                placeholder="예) 35"
+                value={age}
+                onChange={(e) => setAge(e.target.value.replace(/[^\d]/g, "").slice(0, 3))}
+              />
+              <span className="won-suffix">세</span>
+            </div>
+          </>
+        )}
+
+        {needsTenure && (
+          <>
+            <label className="idv-label">
+              근속연수 <span className="wage-badge">필수</span>
+            </label>
+            <div className="won-input">
+              <input
+                className="text-input"
+                inputMode="numeric"
+                placeholder="예) 5"
+                value={tenureYears}
+                onChange={(e) =>
+                  setTenureYears(e.target.value.replace(/[^\d]/g, "").slice(0, 2))
+                }
+              />
+              <span className="won-suffix">년</span>
+            </div>
+          </>
+        )}
+
+        {errorMessage && <div className="error-box">{errorMessage}</div>}
+
+        <button
+          type="button"
+          className="btn"
+          disabled={submitting}
+          onClick={() => onSubmit(age, tenureYears)}
+        >
+          {submitting ? "확인 중…" : "입력하고 혜택 확인하기"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ReportInner({ reportId }: { reportId: number }) {
   const router = useRouter();
   const [report, setReport] = useState<ReportDetail | null>(null);
@@ -315,6 +454,31 @@ function ReportInner({ reportId }: { reportId: number }) {
   const [pdfWage, setPdfWage] = useState("");
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState<"with-wage" | "without-wage" | null>(null);
+  const [showSupplement, setShowSupplement] = useState(false);
+  const [supplementSubmitting, setSupplementSubmitting] = useState(false);
+  const [supplementError, setSupplementError] = useState<string | null>(null);
+
+  async function submitSupplement(age: string, tenureYears: string) {
+    if (!report) return;
+    setSupplementSubmitting(true);
+    setSupplementError(null);
+    try {
+      const toNum = (v: string): number | null => (v ? Number(v) : null);
+      await api.patchAssessment(report.assessmentId, {
+        age: toNum(age),
+        tenureYears: toNum(tenureYears),
+      });
+      const refreshed = await api.getReport(reportId);
+      setReport(refreshed);
+      setShowSupplement(false);
+    } catch (e) {
+      setSupplementError(
+        e instanceof ApiError ? e.message : "정보를 저장하지 못했어요. 다시 시도해주세요.",
+      );
+    } finally {
+      setSupplementSubmitting(false);
+    }
+  }
 
   async function fetchDocuments() {
     setFetching(true);
@@ -501,7 +665,37 @@ function ReportInner({ reportId }: { reportId: number }) {
         />
       )}
 
+      {(report.requiredForMatching?.length ?? 0) > 0 && (
+        <div className="fetch-banner">
+          <span className="fb-ico">🔎</span>
+          <div className="fb-text">
+            <div className="fb-title">
+              {report.requiredForMatching.map((f) => REQUIRED_FIELD_LABEL[f] ?? f).join(", ")}
+              을(를) 입력하면 추가 혜택을 확인할 수 있어요
+            </div>
+            <div className="fb-sub">아래 정보 입력 후 자격이 확정되는 대로 목록에 반영돼요.</div>
+          </div>
+          <button type="button" onClick={() => setShowSupplement(true)}>
+            입력하기
+          </button>
+        </div>
+      )}
+
+      {showSupplement && (
+        <SupplementInputModal
+          requiredForMatching={report.requiredForMatching ?? []}
+          submitting={supplementSubmitting}
+          errorMessage={supplementError}
+          onClose={() => setShowSupplement(false)}
+          onSubmit={submitSupplement}
+        />
+      )}
+
       <PublicBenefitSection benefits={report.publicBenefits ?? []} />
+      <PendingBenefitSection
+        benefits={report.pendingBenefits ?? []}
+        onSupplementClick={() => setShowSupplement(true)}
+      />
 
       {showPdfOptions && (
         <div className="idv-overlay pdf-choice-overlay" onClick={() => setShowPdfOptions(false)}>

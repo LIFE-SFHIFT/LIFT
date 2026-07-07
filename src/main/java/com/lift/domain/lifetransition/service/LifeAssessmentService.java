@@ -1,6 +1,7 @@
 package com.lift.domain.lifetransition.service;
 
 import com.lift.domain.lifetransition.dto.request.LifeAssessmentCreateReqDTO;
+import com.lift.domain.lifetransition.dto.request.LifeAssessmentPatchReqDTO;
 import com.lift.domain.lifetransition.dto.response.LifeAssessmentResDTO;
 import com.lift.domain.lifetransition.dto.response.ReportPreviewResDTO;
 import com.lift.domain.lifetransition.exception.LifeTransitionErrorCode;
@@ -102,6 +103,31 @@ public class LifeAssessmentService {
                 .orElseGet(() -> createReport(assessment));
 
         return ReportPreviewResDTO.from(report);
+    }
+
+    /**
+     * 진단 보완 입력(나이·근속연수). gov24_benefit_cache의 구조화 조건(min_age/max_age 등)
+     * 판정 보류 항목을 확정하기 위해 값이 비어 있던 필드를 나중에 채워 넣을 때 쓴다.
+     * 재분석(analyze)은 이미 분석된 진단이면 기존 리포트를 그대로 반환하므로 다시 호출할
+     * 필요가 없다 — 혜택 추천은 리포트 조회 시점에 최신 진단 값을 기준으로 매번 다시 계산된다.
+     */
+    @Transactional
+    public LifeAssessmentResDTO updatePartial(
+            Authentication authentication,
+            Long assessmentId,
+            LifeAssessmentPatchReqDTO request
+    ) {
+        UserAccount user = userService.getCurrentUser(authentication);
+
+        LifeAssessment assessment = lifeAssessmentRepository.findById(assessmentId)
+                .orElseThrow(() -> new ProjectException(LifeTransitionErrorCode.ASSESSMENT_NOT_FOUND));
+
+        if (!assessment.isOwnedBy(user.getId())) {
+            throw new ProjectException(LifeTransitionErrorCode.REPORT_ACCESS_DENIED);
+        }
+
+        assessment.updatePartial(request.age(), request.tenureYears());
+        return LifeAssessmentResDTO.from(assessment);
     }
 
     private LifeReport createReport(LifeAssessment assessment) {

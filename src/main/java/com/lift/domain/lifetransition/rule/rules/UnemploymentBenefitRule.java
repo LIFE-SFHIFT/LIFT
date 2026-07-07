@@ -34,6 +34,13 @@ public class UnemploymentBenefitRule implements LifeTransitionRule {
             ResignationReason.COMPANY_CLOSURE
     );
 
+    /**
+     * 비자발적 이직 사유(계약만료/권고사직/폐업) 여부. 다른 서비스에서 동일 기준을 재사용할 때 쓴다.
+     */
+    public static boolean isInvoluntaryReason(ResignationReason resignationReason) {
+        return resignationReason != null && QUALIFYING_REASONS.contains(resignationReason);
+    }
+
     @Override
     public List<RuleItemResult> evaluate(RuleContext context) {
         if (context.eventType() != LifeEventType.RETIREMENT

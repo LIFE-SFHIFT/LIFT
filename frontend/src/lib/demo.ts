@@ -1,5 +1,6 @@
 import type {
   AssessmentCreateRequest,
+  AssessmentPatchRequest,
   AssessmentResponse,
   ChatMessage,
   ChatMessageCreateResponse,
@@ -15,9 +16,11 @@ import type {
   LatestChatReport,
   LatestReportRoute,
   PaymentResponse,
+  PublicBenefit,
   ReportDetail,
   ReportPdfEstimateRequest,
   ReportPreview,
+  ResignationReason,
   UserAgreementRequest,
   UserAgreementResponse,
   UserProfile,
@@ -28,6 +31,219 @@ const PROFILE_KEY = "lift.demo.profile";
 const REPORT_KEY = "lift.demo.report";
 const CHAT_KEY = "lift.demo.chat";
 const COMMUNITY_KEY = "lift.demo.community";
+const ASSESSMENT_INPUTS_KEY = "lift.demo.assessmentInputs";
+
+/**
+ * 실제 gov24_benefit_cache에서 나이 조건이 명확히 검증된 항목과 동일한 값.
+ * (다른 3건은 나이 조건이 허구이거나 제도 자체가 불확실해 검증 후 DB에서 제외됨 — 데모에도 반영하지 않는다.)
+ */
+const DEMO_BENEFIT_MASTER = [
+  {
+    title: "청년 일자리 도약 장려금",
+    minAge: 15,
+    maxAge: 34,
+    minInsuranceMonths: 0,
+    minTenureYears: 0,
+    isInvoluntarySub: false,
+    benefitType: "CASH",
+    requiredDocuments: ["체결 근로계약서", "사업자등록증"],
+  },
+  {
+    title: "국민내일배움카드",
+    minAge: 15,
+    maxAge: 75,
+    minInsuranceMonths: 0,
+    minTenureYears: 0,
+    isInvoluntarySub: false,
+    benefitType: "TRAINING",
+    requiredDocuments: ["신분증", "직업훈련 가입신청서"],
+  },
+] as const;
+
+const INVOLUNTARY_REASONS: ResignationReason[] = [
+  "CONTRACT_EXPIRED",
+  "RECOMMENDED_RESIGNATION",
+  "COMPANY_CLOSURE",
+];
+
+interface DemoAssessmentInputs {
+  age: number | null;
+  tenureYears: number | null;
+  employmentInsuranceMonths: number | null;
+  resignationReason: ResignationReason | null;
+}
+
+function saveAssessmentInputs(inputs: DemoAssessmentInputs): DemoAssessmentInputs {
+  return writeJson(ASSESSMENT_INPUTS_KEY, inputs);
+}
+
+function readAssessmentInputs(): DemoAssessmentInputs {
+  return readJson(ASSESSMENT_INPUTS_KEY, {
+    age: null,
+    tenureYears: null,
+    employmentInsuranceMonths: null,
+    resignationReason: null,
+  });
+}
+
+/** 백엔드 Gov24PublicBenefitService와 동일한 규칙(나이/근속연수 제약이 있는데 값이 없으면 판정 보류). */
+function buildDemoBenefits(inputs: DemoAssessmentInputs): {
+  ranked: PublicBenefit[];
+  pending: PublicBenefit[];
+  requiredForMatching: string[];
+} {
+  const isInvoluntary = Boolean(
+    inputs.resignationReason && INVOLUNTARY_REASONS.includes(inputs.resignationReason),
+  );
+  const ranked: PublicBenefit[] = [];
+  const pending: PublicBenefit[] = [];
+  const required = new Set<string>();
+
+  for (const b of DEMO_BENEFIT_MASTER) {
+    if (
+      inputs.employmentInsuranceMonths != null &&
+      inputs.employmentInsuranceMonths < b.minInsuranceMonths
+    ) {
+      continue;
+    }
+    if (b.isInvoluntarySub && !isInvoluntary) continue;
+
+    const ageConstrained = b.minAge > 0 || b.maxAge < 99;
+    const tenureConstrained = b.minTenureYears > 0;
+    const missing: string[] = [];
+    if (ageConstrained && inputs.age == null) missing.push("age");
+    if (tenureConstrained && inputs.tenureYears == null) missing.push("tenureYears");
+
+    if (ageConstrained && inputs.age != null && (inputs.age < b.minAge || inputs.age > b.maxAge)) {
+      continue; // 확정적으로 대상이 아님
+    }
+    if (
+      tenureConstrained &&
+      inputs.tenureYears != null &&
+      inputs.tenureYears < b.minTenureYears
+    ) {
+      continue;
+    }
+
+    const benefit: PublicBenefit = {
+      title: b.title,
+      summary: null,
+      provider: "LIFT 큐레이션",
+      category: b.benefitType,
+      applicationUrl: null,
+      sourceId: `demo-db-${b.title}`,
+      matchedKeyword: "나이 조건 확인",
+      reason: "정형 조건(연령·가입기간·근속연수 등)에 부합해 확인이 필요한 혜택이에요.",
+      sourceLabel: "LIFT 큐레이션 데이터베이스",
+      sourceType: "DB",
+      fitLevel: "HIGH",
+      priorityGroup: b.benefitType === "CASH" ? "TOP_MONEY" : "NEEDS_INFO",
+      supportTarget: null,
+      selectionCriteria: null,
+      supportContent: null,
+      applicationMethod: null,
+      applicationDeadline: null,
+      contact: null,
+      requiredDocuments: b.requiredDocuments.map((name) => ({
+        documentName: name,
+        description: null,
+        issuer: null,
+        required: true,
+      })),
+      missingInputs: missing,
+      aiSummary: null,
+      relevanceScore: 90,
+    };
+
+    if (missing.length > 0) {
+      pending.push(benefit);
+      missing.forEach((m) => required.add(m));
+    } else {
+      ranked.push(benefit);
+    }
+  }
+
+  const gov24Extras: PublicBenefit[] = [
+    {
+      title: "긴급복지 생계지원",
+      summary: "갑작스러운 실직으로 생계가 어려운 가구를 위한 지원 제도입니다.",
+      provider: "보건복지부",
+      category: "생계",
+      applicationUrl: "https://www.gov.kr",
+      sourceId: "demo-gov24-1",
+      matchedKeyword: "실직",
+      reason: "소득 공백과 가구 상황이 연결될 수 있어요.",
+      sourceLabel: "정부24 데모",
+      sourceType: "GOV24_API",
+      fitLevel: "NEEDS_CHECK",
+      priorityGroup: "TOP_MONEY",
+      supportTarget: "위기 상황에 처한 저소득 가구",
+      selectionCriteria: "소득·재산 기준 확인 필요",
+      supportContent: "생계비 등 단기 지원",
+      applicationMethod: "주민센터 문의",
+      applicationDeadline: null,
+      contact: "129",
+      requiredDocuments: [],
+      missingInputs: ["정확한 소득", "재산"],
+      aiSummary: "현재 정보만으로는 확인 필요지만, 실직 직후라면 우선 상담해볼 가치가 있어요.",
+      relevanceScore: 78,
+    },
+    {
+      title: "국민취업지원제도",
+      summary: "구직촉진수당과 취업지원서비스를 함께 제공하는 제도입니다.",
+      provider: "고용노동부",
+      category: "고용·창업",
+      applicationUrl: "https://www.work24.go.kr",
+      sourceId: "demo-gov24-2",
+      matchedKeyword: "구직",
+      reason: "'구직' 상황과 연결되는 공공서비스예요.",
+      sourceLabel: "정부24 데모",
+      sourceType: "GOV24_API",
+      fitLevel: "HIGH",
+      priorityGroup: "TOP_MONEY",
+      supportTarget: "저소득 구직자",
+      selectionCriteria: "소득·재산 기준 확인 필요",
+      supportContent: "월 구직촉진수당 지급",
+      applicationMethod: "고용센터 방문/온라인",
+      applicationDeadline: "상시신청",
+      contact: "1350",
+      requiredDocuments: [],
+      missingInputs: [],
+      aiSummary: "적극적으로 구직 중이라면 우선 검토해볼 만해요.",
+      relevanceScore: 82,
+    },
+    {
+      title: "내일배움카드 훈련장려금",
+      summary: "직업훈련 참여자에게 훈련장려금을 지원합니다.",
+      provider: "한국고용정보원",
+      category: "고용·창업",
+      applicationUrl: "https://www.hrd.go.kr",
+      sourceId: "demo-gov24-3",
+      matchedKeyword: "직업훈련",
+      reason: "'직업훈련' 상황과 연결되는 공공서비스예요.",
+      sourceLabel: "정부24 데모",
+      sourceType: "GOV24_API",
+      fitLevel: "NEEDS_CHECK",
+      priorityGroup: "NEEDS_INFO",
+      supportTarget: "직업훈련 참여자",
+      selectionCriteria: "출석률 등 훈련기관 기준 확인 필요",
+      supportContent: "훈련장려금 지급",
+      applicationMethod: "HRD-Net 온라인 신청",
+      applicationDeadline: "상시신청",
+      contact: "1350",
+      requiredDocuments: [],
+      missingInputs: [],
+      aiSummary: "훈련 과정을 등록하면 함께 신청할 수 있어요.",
+      relevanceScore: 70,
+    },
+  ];
+
+  return {
+    ranked: [...ranked, ...gov24Extras].sort((a, b) => b.relevanceScore - a.relevanceScore),
+    pending,
+    requiredForMatching: Array.from(required),
+  };
+}
 
 const now = () => new Date().toISOString();
 
@@ -117,6 +333,14 @@ function reportFromAssessment(payload: AssessmentCreateRequest): ReportDetail {
   const noIncome = payload.currentIncomeStatus === "NONE";
   const receiveAmount = unemployed ? 7200000 : 0;
   const monthlySaving = noIncome ? 148000 : 0;
+
+  const inputs = saveAssessmentInputs({
+    age: payload.age ?? null,
+    tenureYears: payload.tenureYears ?? null,
+    employmentInsuranceMonths: payload.employmentInsuranceMonths ?? null,
+    resignationReason: payload.resignationReason ?? null,
+  });
+  const { ranked, pending, requiredForMatching } = buildDemoBenefits(inputs);
 
   return {
     reportId,
@@ -233,31 +457,9 @@ function reportFromAssessment(payload: AssessmentCreateRequest): ReportDetail {
         ],
       },
     ],
-    publicBenefits: [
-      {
-        title: "긴급복지 생계지원",
-        summary: "갑작스러운 실직으로 생계가 어려운 가구를 위한 지원 제도입니다.",
-        provider: "보건복지부",
-        category: "생계",
-        applicationUrl: "https://www.gov.kr",
-        sourceId: "demo-benefit-1",
-        matchedKeyword: "실직",
-        reason: "소득 공백과 가구 상황이 연결될 수 있어요.",
-        sourceLabel: "정부24 데모",
-        fitLevel: "NEEDS_CHECK",
-        priorityGroup: "TOP_MONEY",
-        supportTarget: "위기 상황에 처한 저소득 가구",
-        selectionCriteria: "소득·재산 기준 확인 필요",
-        supportContent: "생계비 등 단기 지원",
-        applicationMethod: "주민센터 문의",
-        applicationDeadline: null,
-        contact: "129",
-        requiredDocuments: [],
-        missingInputs: ["정확한 소득", "재산"],
-        aiSummary: "현재 정보만으로는 확인 필요지만, 실직 직후라면 우선 상담해볼 가치가 있어요.",
-        relevanceScore: 78,
-      },
-    ],
+    publicBenefits: ranked,
+    pendingBenefits: pending,
+    requiredForMatching: requiredForMatching,
   };
 }
 
@@ -349,6 +551,31 @@ export const demoApi = {
       assessmentId: report.assessmentId,
       eventType: payload.eventType,
       status: "DRAFT",
+      createdAt: report.createdAt,
+    });
+  },
+
+  patchAssessment(
+    _assessmentId: number,
+    payload: AssessmentPatchRequest,
+  ): Promise<AssessmentResponse> {
+    const current = readAssessmentInputs();
+    const nextInputs = saveAssessmentInputs({
+      ...current,
+      age: payload.age ?? current.age,
+      tenureYears: payload.tenureYears ?? current.tenureYears,
+    });
+    const { ranked, pending, requiredForMatching } = buildDemoBenefits(nextInputs);
+    const report = saveReport({
+      ...requireReport(),
+      publicBenefits: ranked,
+      pendingBenefits: pending,
+      requiredForMatching,
+    });
+    return Promise.resolve({
+      assessmentId: report.assessmentId,
+      eventType: "RETIREMENT",
+      status: "ANALYZED",
       createdAt: report.createdAt,
     });
   },

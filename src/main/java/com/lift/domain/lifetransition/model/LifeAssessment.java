@@ -168,6 +168,18 @@ public class LifeAssessment extends BaseCreatedUpdatedEntity {
         this.status = AssessmentStatus.DRAFT;
     }
 
+    /**
+     * 진단 보완 입력. 값이 전달된 필드만 갱신하고(null은 무시), 나머지 필드는 그대로 둔다.
+     */
+    public void updatePartial(Integer nextAge, Integer nextTenureYears) {
+        if (nextAge != null) {
+            this.age = nextAge;
+        }
+        if (nextTenureYears != null) {
+            this.tenureYears = nextTenureYears;
+        }
+    }
+
     public void markAnalyzed() {
         if (this.status == AssessmentStatus.DRAFT) {
             this.status = AssessmentStatus.ANALYZED;

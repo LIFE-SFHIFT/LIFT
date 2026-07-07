@@ -2,6 +2,7 @@ package com.lift.domain.lifetransition.dto.response;
 
 import com.lift.domain.lifetransition.enumtype.PublicBenefitFitLevel;
 import com.lift.domain.lifetransition.enumtype.PublicBenefitPriorityGroup;
+import com.lift.domain.lifetransition.enumtype.PublicBenefitSourceType;
 import java.util.List;
 
 public record PublicBenefitResDTO(
@@ -14,6 +15,7 @@ public record PublicBenefitResDTO(
         String matchedKeyword,
         String reason,
         String sourceLabel,
+        PublicBenefitSourceType sourceType,
         PublicBenefitFitLevel fitLevel,
         PublicBenefitPriorityGroup priorityGroup,
         String supportTarget,
@@ -46,6 +48,7 @@ public record PublicBenefitResDTO(
                 matchedKeyword,
                 nextReason == null ? reason : nextReason,
                 sourceLabel,
+                sourceType,
                 nextFitLevel == null ? fitLevel : nextFitLevel,
                 nextPriorityGroup == null ? priorityGroup : nextPriorityGroup,
                 supportTarget,

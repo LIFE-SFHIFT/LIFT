@@ -3,6 +3,7 @@ import { demoApi } from "./demo";
 import type {
   ApiResponse,
   AssessmentCreateRequest,
+  AssessmentPatchRequest,
   AssessmentResponse,
   AuthLoginResponse,
   ChatMessageCreateResponse,
@@ -105,6 +106,17 @@ export const api = {
     if (isDemoSession()) return demoApi.createAssessment(payload);
     return request<AssessmentResponse>("/api/life/assessments", {
       method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  patchAssessment(
+    assessmentId: number,
+    payload: AssessmentPatchRequest,
+  ): Promise<AssessmentResponse> {
+    if (isDemoSession()) return demoApi.patchAssessment(assessmentId, payload);
+    return request<AssessmentResponse>(`/api/life/assessments/${assessmentId}`, {
+      method: "PATCH",
       body: JSON.stringify(payload),
     });
   },

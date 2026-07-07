@@ -1,15 +1,18 @@
 package com.lift.domain.lifetransition.service;
 
+import com.lift.domain.lifetransition.dto.response.LifeReportResDTO.BenefitRecommendationResult;
 import com.lift.domain.lifetransition.dto.response.PublicBenefitResDTO;
 import com.lift.domain.lifetransition.dto.response.RequiredDocumentResDTO;
 import com.lift.domain.lifetransition.enumtype.HouseholdType;
 import com.lift.domain.lifetransition.enumtype.LifeEventType;
 import com.lift.domain.lifetransition.enumtype.PublicBenefitFitLevel;
 import com.lift.domain.lifetransition.enumtype.PublicBenefitPriorityGroup;
+import com.lift.domain.lifetransition.enumtype.PublicBenefitSourceType;
+import com.lift.domain.lifetransition.model.Gov24BenefitCache;
 import com.lift.domain.lifetransition.model.LifeAssessment;
 import com.lift.domain.lifetransition.model.LifeReport;
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
+import com.lift.domain.lifetransition.repository.Gov24BenefitCacheRepository;
+import com.lift.domain.lifetransition.rule.rules.UnemploymentBenefitRule;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -22,18 +25,17 @@ import java.util.Map;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.util.UriComponentsBuilder;
 
 /**
- * 공공데이터포털 행정안전부_대한민국 공공서비스(혜택) 정보 연동.
+ * 정부24/보조금24 공공서비스 혜택 데이터 연동.
  *
  * 기존 룰 엔진은 설명 가능한 핵심 절차를 만들고, 이 서비스는 정부24/보조금24 공개
  * 카탈로그에서 사용자의 상황과 가까운 추가 혜택 후보를 보강한다.
+ *
+ * 매 요청마다 외부 API를 직접 호출하지 않고, 미리 수집해 {@code gov24_benefit_cache}에
+ * 캐싱해 둔 데이터({@link Gov24BenefitCacheRepository})를 읽어와 동일한 키워드 매칭·점수 로직을 적용한다.
  */
 @Slf4j
 @Service
@@ -43,158 +45,180 @@ public class Gov24PublicBenefitService {
     private static final String SOURCE_LABEL = "공공데이터포털 · 정부24 공공서비스";
     private static final Duration CACHE_TTL = Duration.ofMinutes(30);
 
-    private final RestClient.Builder restClientBuilder;
+    private final Gov24BenefitCacheRepository gov24BenefitCacheRepository;
     private final Gov24PublicServiceProperties properties;
     private final PublicBenefitRecommendationService recommendationService;
 
     private volatile CachedRows cachedRows;
-    private volatile CachedRows cachedDetailRows;
 
-    public List<PublicBenefitResDTO> findBenefits(LifeReport report) {
+    public BenefitRecommendationResult findBenefits(LifeReport report) {
         if (!properties.isAvailable()) {
-            return List.of();
+            return BenefitRecommendationResult.empty();
         }
 
-        RestClient restClient = restClientBuilder.build();
-        Map<String, Map<String, Object>> detailByServiceId = detailByServiceId(restClient);
-        Map<String, BenefitCandidate> candidates = new LinkedHashMap<>();
+        LifeAssessment assessment = report.getAssessment();
+        boolean isInvoluntary = UnemploymentBenefitRule.isInvoluntaryReason(assessment.getResignationReason());
+
+        Map<String, BenefitCandidate> confirmedCandidates = new LinkedHashMap<>();
+        List<PublicBenefitResDTO> pendingBenefits = new ArrayList<>();
+        Set<String> requiredForMatching = new LinkedHashSet<>();
 
         List<String> keywords = buildKeywords(report).stream()
                 .limit(Math.max(1, properties.getMaxKeywords()))
                 .toList();
 
-        for (Map<String, Object> row : fetchServicePages(restClient)) {
+        for (Gov24BenefitCache cached : fetchCachedRows()) {
+            Map<String, Object> row = cached.getRawJson();
+            if (row == null) {
+                continue;
+            }
             String matchedKeyword = findMatchedKeyword(row, keywords);
             if (!StringUtils.hasText(matchedKeyword)) {
                 continue;
             }
+            if (excludedByStructuredCriteria(cached, assessment, isInvoluntary)) {
+                continue;
+            }
 
-            String sourceId = value(row, "서비스ID", "서비스아이디", "서비스관리번호", "서비스코드", "id", "serviceId");
-            BenefitCandidate candidate = toCandidate(report, row, detailByServiceId.get(sourceId), matchedKeyword);
+            boolean verifiedMatch = hasVerifiedStructuredMatch(cached, assessment, isInvoluntary);
+            BenefitCandidate candidate = toCandidate(report, row, null, matchedKeyword, verifiedMatch);
             if (candidate == null) {
                 continue;
             }
-            candidates.merge(
-                    dedupeKey(candidate.benefit()),
-                    candidate,
-                    (left, right) -> left.score() >= right.score() ? left : right
-            );
+
+            List<String> structuredMissing = missingStructuredFields(cached, assessment);
+            if (structuredMissing.isEmpty()) {
+                confirmedCandidates.merge(
+                        dedupeKey(candidate.benefit()),
+                        candidate,
+                        (left, right) -> left.score() >= right.score() ? left : right
+                );
+            } else {
+                requiredForMatching.addAll(structuredMissing);
+                pendingBenefits.add(withMissingInputs(candidate.benefit(), structuredMissing));
+            }
         }
 
-        List<PublicBenefitResDTO> preRanked = candidates.values().stream()
+        List<PublicBenefitResDTO> preRanked = confirmedCandidates.values().stream()
                 .sorted(Comparator.comparingInt(BenefitCandidate::score).reversed())
                 .limit(Math.max(15, properties.getMaxResults()))
                 .map(BenefitCandidate::benefit)
                 .map(benefit -> trimLongFields(benefit, 1200))
                 .toList();
 
-        return recommendationService.recommend(report, preRanked).stream()
+        List<PublicBenefitResDTO> ranked = recommendationService.recommend(report, preRanked).stream()
                 .limit(Math.max(1, properties.getMaxResults()))
                 .toList();
+
+        return new BenefitRecommendationResult(ranked, pendingBenefits, List.copyOf(requiredForMatching));
     }
 
-    private Map<String, Map<String, Object>> detailByServiceId(RestClient restClient) {
-        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
-        for (Map<String, Object> detail : fetchServiceDetailPages(restClient)) {
-            String sourceId = value(detail, "서비스ID", "서비스아이디", "서비스관리번호", "서비스코드", "id", "serviceId");
-            if (StringUtils.hasText(sourceId)) {
-                result.put(sourceId, detail);
+    /**
+     * 사용자가 입력한 값이 있는데 구조화 조건과 명백히 어긋나는 경우에만 후보에서 제외한다.
+     * 조건이 존재해도 사용자 값이 아직 없으면(null) 배제하지 않고 pending으로 넘어간다.
+     */
+    private boolean excludedByStructuredCriteria(Gov24BenefitCache cached, LifeAssessment assessment, boolean isInvoluntary) {
+        Integer age = assessment.getAge();
+        if (age != null) {
+            if (cached.getMinAge() != null && age < cached.getMinAge()) {
+                return true;
+            }
+            if (cached.getMaxAge() != null && age > cached.getMaxAge()) {
+                return true;
             }
         }
-        return result;
+        Integer tenureYears = assessment.getTenureYears();
+        if (tenureYears != null && cached.getMinTenureYears() != null && tenureYears < cached.getMinTenureYears()) {
+            return true;
+        }
+        Integer insuranceMonths = assessment.getEmploymentInsuranceMonths();
+        if (insuranceMonths != null && cached.getMinInsuranceMonths() != null && insuranceMonths < cached.getMinInsuranceMonths()) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(cached.getIsInvoluntarySub()) && !isInvoluntary) {
+            return true;
+        }
+        return false;
     }
 
-    private List<Map<String, Object>> fetchServicePages(RestClient restClient) {
+    /**
+     * 나이·근속연수·고용보험 가입기간·비자발적 이직 여부 중 하나라도 실제 사용자 값과 대조해
+     * 자격을 검증한 경우 true를 반환한다. DB에 조건이 있어도 사용자 값이 없어 대조하지 못했다면
+     * false다 — "긴급복지"처럼 텍스트만 겹치는 느슨한 매칭보다 신뢰도가 높은 후보를 가중치로
+     * 구분하기 위해 사용한다.
+     */
+    private boolean hasVerifiedStructuredMatch(Gov24BenefitCache cached, LifeAssessment assessment, boolean isInvoluntary) {
+        if (assessment.getAge() != null && (cached.getMinAge() != null || cached.getMaxAge() != null)) {
+            return true;
+        }
+        if (assessment.getTenureYears() != null && cached.getMinTenureYears() != null && cached.getMinTenureYears() > 0) {
+            return true;
+        }
+        if (assessment.getEmploymentInsuranceMonths() != null && cached.getMinInsuranceMonths() != null) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(cached.getIsInvoluntarySub()) && isInvoluntary) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 구조화 조건은 있지만(min/max 등이 non-null) 사용자 입력이 비어 있어 확정 판정이
+     * 불가능한 필드 목록을 반환한다. 비어 있으면 확정 가능하다는 뜻이다.
+     */
+    private List<String> missingStructuredFields(Gov24BenefitCache cached, LifeAssessment assessment) {
+        List<String> missing = new ArrayList<>();
+        boolean ageConstrained = cached.getMinAge() != null || cached.getMaxAge() != null;
+        if (ageConstrained && assessment.getAge() == null) {
+            missing.add("age");
+        }
+        boolean tenureConstrained = cached.getMinTenureYears() != null && cached.getMinTenureYears() > 0;
+        if (tenureConstrained && assessment.getTenureYears() == null) {
+            missing.add("tenureYears");
+        }
+        return missing;
+    }
+
+    private PublicBenefitResDTO withMissingInputs(PublicBenefitResDTO benefit, List<String> structuredMissing) {
+        List<String> combined = new ArrayList<>(benefit.missingInputs() == null ? List.of() : benefit.missingInputs());
+        for (String field : structuredMissing) {
+            if (!combined.contains(field)) {
+                combined.add(field);
+            }
+        }
+        return trimLongFields(benefit, 1200).withAiRecommendation(
+                benefit.fitLevel(),
+                benefit.priorityGroup(),
+                benefit.reason(),
+                benefit.aiSummary(),
+                combined,
+                benefit.relevanceScore()
+        );
+    }
+
+    private List<Gov24BenefitCache> fetchCachedRows() {
         CachedRows cached = cachedRows;
         Instant now = Instant.now();
         if (cached != null && cached.expiresAt().isAfter(now)) {
             return cached.rows();
         }
 
-        List<Map<String, Object>> rows = fetchPages(restClient, "serviceList");
+        List<Gov24BenefitCache> rows = gov24BenefitCacheRepository.findAll().stream()
+                .filter(row -> row.getRawJson() != null)
+                .toList();
         if (!rows.isEmpty()) {
             cachedRows = new CachedRows(List.copyOf(rows), now.plus(CACHE_TTL));
         }
         return rows;
     }
 
-    private List<Map<String, Object>> fetchServiceDetailPages(RestClient restClient) {
-        CachedRows cached = cachedDetailRows;
-        Instant now = Instant.now();
-        if (cached != null && cached.expiresAt().isAfter(now)) {
-            return cached.rows();
-        }
-
-        List<Map<String, Object>> rows = fetchPages(restClient, "serviceDetail");
-        if (!rows.isEmpty()) {
-            cachedDetailRows = new CachedRows(List.copyOf(rows), now.plus(CACHE_TTL));
-        }
-        return rows;
-    }
-
-    private List<Map<String, Object>> fetchPages(RestClient restClient, String endpoint) {
-        int maxPages = Math.max(1, properties.getMaxPages());
-        int perPage = Math.max(1, properties.getPerPage());
-        List<Map<String, Object>> rows = new ArrayList<>();
-
-        for (int page = 1; page <= maxPages; page++) {
-            PageRows pageRows = fetchServicePage(restClient, endpoint, page, perPage);
-            rows.addAll(pageRows.rows());
-            if (pageRows.currentCount() < perPage || pageRows.rows().isEmpty()) {
-                break;
-            }
-        }
-        return rows;
-    }
-
-    private PageRows fetchServicePage(RestClient restClient, String endpoint, int page, int perPage) {
-        URI uri = UriComponentsBuilder
-                .fromUriString(StringUtils.trimTrailingCharacter(properties.getBaseUrl(), '/') + "/" + endpoint)
-                .queryParam("page", page)
-                .queryParam("perPage", perPage)
-                .queryParam("returnType", "JSON")
-                .queryParam("serviceKey", properties.getServiceKey())
-                .build()
-                .encode(StandardCharsets.UTF_8)
-                .toUri();
-
-        try {
-            Map<String, Object> response = restClient.get()
-                    .uri(uri)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<>() {
-                    });
-
-            if (response == null) {
-                return new PageRows(List.of(), 0);
-            }
-            Object code = response.get("code");
-            if (code != null && !String.valueOf(code).equals("0")) {
-                log.warn("Gov24 public benefit API returned code={} message={}", code, response.get("msg"));
-                return new PageRows(List.of(), 0);
-            }
-            Object data = response.get("data");
-            if (!(data instanceof List<?> rows)) {
-                return new PageRows(List.of(), number(response.get("currentCount")));
-            }
-            List<Map<String, Object>> result = new ArrayList<>();
-            for (Object row : rows) {
-                if (row instanceof Map<?, ?> map) {
-                    result.add(toStringObjectMap(map));
-                }
-            }
-            return new PageRows(result, number(response.get("currentCount")));
-        } catch (RestClientException e) {
-            log.warn("Gov24 public benefit API lookup failed. endpoint={}, page={}", endpoint, page, e);
-            return new PageRows(List.of(), 0);
-        }
-    }
-
     private BenefitCandidate toCandidate(
             LifeReport report,
             Map<String, Object> row,
             Map<String, Object> detail,
-            String keyword
+            String keyword,
+            boolean verifiedMatch
     ) {
         String title = value(row, "서비스명", "서비스명칭", "서비스", "serviceName", "srvNm");
         if (!StringUtils.hasText(title)) {
@@ -217,7 +241,7 @@ public class Gov24PublicBenefitService {
         String contact = value(source, "전화문의", "문의처");
         List<RequiredDocumentResDTO> documents = extractDocuments(source);
         String reason = buildReason(assessment, title, summary, provider, keyword);
-        int score = score(assessment, title, summary, provider, supportTarget, selectionCriteria, supportContent, applicationDeadline, keyword, applicationUrl);
+        int score = score(assessment, title, summary, provider, supportTarget, selectionCriteria, supportContent, applicationDeadline, keyword, applicationUrl, verifiedMatch);
         PublicBenefitFitLevel fitLevel = fitLevel(score, supportTarget, selectionCriteria);
         PublicBenefitPriorityGroup priorityGroup = priorityGroup(assessment, title, supportContent, applicationDeadline, fitLevel);
         List<String> missingInputs = missingInputs(assessment, supportTarget, selectionCriteria);
@@ -232,6 +256,7 @@ public class Gov24PublicBenefitService {
                 keyword,
                 reason,
                 SOURCE_LABEL,
+                PublicBenefitSourceType.GOV24_API,
                 fitLevel,
                 priorityGroup,
                 blankToNull(supportTarget),
@@ -322,11 +347,17 @@ public class Gov24PublicBenefitService {
             String supportContent,
             String applicationDeadline,
             String matchedKeyword,
-            String applicationUrl
+            String applicationUrl,
+            boolean verifiedMatch
     ) {
         int score = 0;
         String merged = joinForSearch(title, summary, provider, supportTarget, selectionCriteria, supportContent);
 
+        if (verifiedMatch) {
+            // 나이·근속연수 등 구조화 조건을 실제 사용자 값과 대조해 확정한 후보는, "긴급복지"류
+            // 키워드만 겹치는 느슨한 매칭보다 신뢰도가 높으므로 우선 노출되도록 가중치를 준다.
+            score += 50;
+        }
         if (contains(title, matchedKeyword)) {
             score += 40;
         }
@@ -465,6 +496,7 @@ public class Gov24PublicBenefitService {
                 benefit.matchedKeyword(),
                 benefit.reason(),
                 benefit.sourceLabel(),
+                benefit.sourceType(),
                 benefit.fitLevel(),
                 benefit.priorityGroup(),
                 shorten(benefit.supportTarget(), maxLength),
@@ -506,16 +538,6 @@ public class Gov24PublicBenefitService {
             }
         }
         return null;
-    }
-
-    private Map<String, Object> toStringObjectMap(Map<?, ?> map) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        map.forEach((key, value) -> {
-            if (key != null) {
-                result.put(String.valueOf(key), value);
-            }
-        });
-        return result;
     }
 
     private Map<String, Object> merge(Map<String, Object> base, Map<String, Object> detail) {
@@ -574,24 +596,7 @@ public class Gov24PublicBenefitService {
                 .toLowerCase(Locale.ROOT);
     }
 
-    private int number(Object value) {
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        if (value == null) {
-            return 0;
-        }
-        try {
-            return Integer.parseInt(String.valueOf(value));
-        } catch (NumberFormatException e) {
-            return 0;
-        }
-    }
-
-    private record PageRows(List<Map<String, Object>> rows, int currentCount) {
-    }
-
-    private record CachedRows(List<Map<String, Object>> rows, Instant expiresAt) {
+    private record CachedRows(List<Gov24BenefitCache> rows, Instant expiresAt) {
     }
 
     private record BenefitCandidate(PublicBenefitResDTO benefit, int score) {
