@@ -60,6 +60,9 @@ public class LifeAssessment extends BaseCreatedUpdatedEntity {
     @Column(name = "next_job_status", length = 20)
     private NextJobStatus nextJobStatus;
 
+    @Column(name = "next_job_start_date")
+    private LocalDate nextJobStartDate;
+
     @Column(name = "employment_insurance_months")
     private Integer employmentInsuranceMonths;
 
@@ -101,8 +104,13 @@ public class LifeAssessment extends BaseCreatedUpdatedEntity {
     @Column(name = "housing_type", length = 30)
     private HousingType housingType;
 
+    /** 자녀 있음. 가구원 정보(복수 선택)의 한 항목. */
     @Column(name = "has_dependent_children")
     private Boolean hasDependentChildren;
+
+    /** 부양가족 있음. 가구원 정보(복수 선택)의 한 항목. */
+    @Column(name = "has_supporting_family")
+    private Boolean hasSupportingFamily;
 
     @Column(name = "basic_livelihood_recipient")
     private Boolean basicLivelihoodRecipient;
@@ -127,6 +135,7 @@ public class LifeAssessment extends BaseCreatedUpdatedEntity {
             LocalDate retirementDate,
             ResignationReason resignationReason,
             NextJobStatus nextJobStatus,
+            LocalDate nextJobStartDate,
             Integer employmentInsuranceMonths,
             CurrentIncomeStatus currentIncomeStatus,
             String regionSido,
@@ -139,6 +148,7 @@ public class LifeAssessment extends BaseCreatedUpdatedEntity {
             AssetRange assetRange,
             HousingType housingType,
             Boolean hasDependentChildren,
+            Boolean hasSupportingFamily,
             Boolean basicLivelihoodRecipient,
             Boolean nearPoverty,
             Boolean singleParent,
@@ -149,6 +159,7 @@ public class LifeAssessment extends BaseCreatedUpdatedEntity {
         this.retirementDate = retirementDate;
         this.resignationReason = resignationReason;
         this.nextJobStatus = nextJobStatus;
+        this.nextJobStartDate = nextJobStartDate;
         this.employmentInsuranceMonths = employmentInsuranceMonths;
         this.currentIncomeStatus = currentIncomeStatus;
         this.regionSido = regionSido;
@@ -161,6 +172,7 @@ public class LifeAssessment extends BaseCreatedUpdatedEntity {
         this.assetRange = assetRange;
         this.housingType = housingType;
         this.hasDependentChildren = hasDependentChildren;
+        this.hasSupportingFamily = hasSupportingFamily;
         this.basicLivelihoodRecipient = basicLivelihoodRecipient;
         this.nearPoverty = nearPoverty;
         this.singleParent = singleParent;

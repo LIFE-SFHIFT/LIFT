@@ -1,6 +1,7 @@
 package com.lift.domain.lifetransition.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -59,6 +60,9 @@ class LifeAssessmentControllerTest {
                 .andExpect(jsonPath("$.result.locked").value(true))
                 .andExpect(jsonPath("$.result.paymentStatus").value("UNPAID"))
                 .andExpect(jsonPath("$.result.totalItemCount").isNumber())
+                .andExpect(jsonPath("$.result.actionableItemCount").isNumber())
+                // 월급 없이도 진단 입력만으로 예상 수령액 범위가 계산되어야 한다.
+                .andExpect(jsonPath("$.result.expectedAmountRangeLabel", containsString("~")))
                 .andExpect(jsonPath("$.result.highlightItems").isArray())
                 .andReturn();
 
@@ -66,6 +70,7 @@ class LifeAssessmentControllerTest {
         // 미리보기에는 하이라이트만 노출되고 전체 항목보다 적어야 한다(잠금).
         assertThat(preview.at("/highlightItems").size()).isLessThanOrEqualTo(2);
         assertThat(preview.at("/totalItemCount").asInt()).isGreaterThanOrEqualTo(preview.at("/highlightItems").size());
+        assertThat(preview.at("/actionableItemCount").asInt()).isGreaterThanOrEqualTo(0);
     }
 
     @Test
@@ -118,12 +123,14 @@ class LifeAssessmentControllerTest {
         mockMvc.perform(authorized(post("/api/life/reports/" + reportId + "/payments/mock-complete")))
                 .andExpect(status().isOk());
 
+        // 월급이 없어도 실업급여는 법정 하한~상한 일액으로 범위 추정치를 계산한다.
         mockMvc.perform(authorized(post("/api/life/reports/" + reportId + "/pdf-estimate"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.benefitSummary.estimated").value(false))
-                .andExpect(jsonPath("$.result.items[0].estimate.kind").value("NOT_ESTIMATED"));
+                .andExpect(jsonPath("$.result.benefitSummary.estimated").value(true))
+                .andExpect(jsonPath("$.result.items[0].estimate.kind").value("RECEIVE"))
+                .andExpect(jsonPath("$.result.items[0].estimate.amountLabel", containsString("~")));
 
         mockMvc.perform(authorized(post("/api/life/reports/" + reportId + "/pdf-estimate"))
                         .contentType(MediaType.APPLICATION_JSON)

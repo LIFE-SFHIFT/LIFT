@@ -33,6 +33,7 @@ public class LifeAssessmentService {
     private final LifeAssessmentRepository lifeAssessmentRepository;
     private final LifeReportRepository lifeReportRepository;
     private final RuleEngineService ruleEngineService;
+    private final BenefitEstimationService benefitEstimationService;
     private final UserService userService;
 
     @Transactional
@@ -49,6 +50,7 @@ public class LifeAssessmentService {
                 request.assetRange(),
                 request.housingType(),
                 request.hasDependentChildren(),
+                request.hasSupportingFamily(),
                 request.basicLivelihoodRecipient(),
                 request.nearPoverty(),
                 request.singleParent(),
@@ -61,6 +63,7 @@ public class LifeAssessmentService {
                 .retirementDate(request.retirementDate())
                 .resignationReason(request.resignationReason())
                 .nextJobStatus(request.nextJobStatus())
+                .nextJobStartDate(request.nextJobStartDate())
                 .employmentInsuranceMonths(request.employmentInsuranceMonths())
                 .currentIncomeStatus(request.currentIncomeStatus())
                 .regionSido(request.regionSido())
@@ -73,6 +76,7 @@ public class LifeAssessmentService {
                 .assetRange(request.assetRange())
                 .housingType(request.housingType())
                 .hasDependentChildren(request.hasDependentChildren())
+                .hasSupportingFamily(request.hasSupportingFamily())
                 .basicLivelihoodRecipient(request.basicLivelihoodRecipient())
                 .nearPoverty(request.nearPoverty())
                 .singleParent(request.singleParent())
@@ -101,7 +105,7 @@ public class LifeAssessmentService {
         LifeReport report = lifeReportRepository.findByAssessment_Id(assessmentId)
                 .orElseGet(() -> createReport(assessment));
 
-        return ReportPreviewResDTO.from(report);
+        return ReportPreviewResDTO.from(report, benefitEstimationService.previewRangeLabel(report));
     }
 
     private LifeReport createReport(LifeAssessment assessment) {

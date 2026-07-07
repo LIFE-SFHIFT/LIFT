@@ -28,6 +28,8 @@ public record LifeAssessmentCreateReqDTO(
 
         NextJobStatus nextJobStatus,
 
+        LocalDate nextJobStartDate,
+
         @Min(value = 0, message = "고용보험 가입 개월 수는 0 이상이어야 합니다.")
         @Max(value = 600, message = "고용보험 가입 개월 수를 확인해주세요.")
         Integer employmentInsuranceMonths,
@@ -61,6 +63,8 @@ public record LifeAssessmentCreateReqDTO(
         HousingType housingType,
 
         Boolean hasDependentChildren,
+
+        Boolean hasSupportingFamily,
 
         Boolean basicLivelihoodRecipient,
 

@@ -44,6 +44,7 @@ public class UserService {
                 request.assetRange(),
                 request.housingType(),
                 request.hasDependentChildren(),
+                request.hasSupportingFamily(),
                 request.basicLivelihoodRecipient(),
                 request.nearPoverty(),
                 request.singleParent(),

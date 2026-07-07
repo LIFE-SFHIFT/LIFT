@@ -6,6 +6,7 @@ package com.lift.domain.lifetransition.enumtype;
 public enum ResignationReason {
     CONTRACT_EXPIRED,
     RECOMMENDED_RESIGNATION,
+    MANDATORY_RETIREMENT,
     PERSONAL_REASON,
     FIRED,
     COMPANY_CLOSURE,

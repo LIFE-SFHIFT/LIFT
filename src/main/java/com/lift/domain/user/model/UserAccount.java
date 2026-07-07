@@ -116,6 +116,9 @@ public class UserAccount {
     @Column(name = "has_dependent_children")
     private Boolean hasDependentChildren;
 
+    @Column(name = "has_supporting_family")
+    private Boolean hasSupportingFamily;
+
     @Column(name = "basic_livelihood_recipient")
     private Boolean basicLivelihoodRecipient;
 
@@ -222,6 +225,7 @@ public class UserAccount {
             AssetRange assetRange,
             HousingType housingType,
             Boolean hasDependentChildren,
+            Boolean hasSupportingFamily,
             Boolean basicLivelihoodRecipient,
             Boolean nearPoverty,
             Boolean singleParent,
@@ -260,6 +264,9 @@ public class UserAccount {
         }
         if (hasDependentChildren != null) {
             this.hasDependentChildren = hasDependentChildren;
+        }
+        if (hasSupportingFamily != null) {
+            this.hasSupportingFamily = hasSupportingFamily;
         }
         if (basicLivelihoodRecipient != null) {
             this.basicLivelihoodRecipient = basicLivelihoodRecipient;
@@ -397,6 +404,10 @@ public class UserAccount {
 
     public Boolean getHasDependentChildren() {
         return hasDependentChildren;
+    }
+
+    public Boolean getHasSupportingFamily() {
+        return hasSupportingFamily;
     }
 
     public Boolean getBasicLivelihoodRecipient() {

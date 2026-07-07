@@ -1,4 +1,5 @@
 import type {
+  AnnualIncomeRange,
   AssessmentCreateRequest,
   AssessmentResponse,
   ChatMessage,
@@ -12,12 +13,15 @@ import type {
   CommunityPostDetail,
   CommunityPostSummary,
   DocumentFetchResponse,
+  EligibilityLevel,
   LatestChatReport,
   LatestReportRoute,
   PaymentResponse,
   ReportDetail,
+  ReportItem,
   ReportPdfEstimateRequest,
   ReportPreview,
+  ResignationReason,
   UserAgreementRequest,
   UserAgreementResponse,
   UserProfile,
@@ -26,6 +30,7 @@ import type {
 
 const PROFILE_KEY = "lift.demo.profile";
 const REPORT_KEY = "lift.demo.report";
+const ASSESSMENT_KEY = "lift.demo.assessment";
 const CHAT_KEY = "lift.demo.chat";
 const COMMUNITY_KEY = "lift.demo.community";
 
@@ -49,6 +54,7 @@ const defaultProfile: UserProfile = {
   assetRange: "UNKNOWN",
   housingType: "UNKNOWN",
   hasDependentChildren: false,
+  hasSupportingFamily: false,
   basicLivelihoodRecipient: false,
   nearPoverty: false,
   singleParent: false,
@@ -91,12 +97,86 @@ function saveReport(report: ReportDetail): ReportDetail {
   return writeJson(REPORT_KEY, report);
 }
 
+// PDF 저장 시 월급으로 예상액을 재계산하려면 원본 진단 입력이 필요하므로 함께 보관한다.
+function savedAssessment(): AssessmentCreateRequest | null {
+  return readJson<AssessmentCreateRequest | null>(ASSESSMENT_KEY, null);
+}
+
+function saveAssessment(payload: AssessmentCreateRequest): AssessmentCreateRequest {
+  return writeJson(ASSESSMENT_KEY, payload);
+}
+
+// ─── 데모 금액 계산: 백엔드 BenefitEstimationService(2026년 기준)를 미러링한다 ───
+const DAILY_BENEFIT_LOWER = 66_048; // 구직급여 1일 하한액
+const DAILY_BENEFIT_UPPER = 68_100; // 구직급여 1일 상한액
+const PENSION_RATE = 0.09;
+const PENSION_MONTHLY_INCOME_CAP = 6_370_000;
+const HEALTH_EMPLOYEE_RATE = 0.03545;
+const WAGE_REPLACEMENT_RATE = 0.6; // 실업급여: 평균임금 대비 지급률
+const DAYS_PER_MONTH = 30; // 1일 평균임금 근사: 월급 / 30
+// 연소득 구간 정보가 없을 때 월 절감액 추정에 쓰는 기본 월소득
+const DEFAULT_MONTHLY_INCOME = 3_000_000;
+
+/** 구직급여일액을 법정 하한~상한 사이로 고정. 백엔드 clampDailyBenefit와 동일. */
+function clampDailyBenefit(raw: number): number {
+  const v = Math.round(raw);
+  if (v > DAILY_BENEFIT_UPPER) return DAILY_BENEFIT_UPPER;
+  if (v < DAILY_BENEFIT_LOWER) return DAILY_BENEFIT_LOWER;
+  return v;
+}
+
+// 백엔드 UnemploymentBenefitRule의 비자발적 이직 사유와 동일하게 유지한다.
+const QUALIFYING_RESIGNATION_REASONS: ResignationReason[] = [
+  "CONTRACT_EXPIRED",
+  "RECOMMENDED_RESIGNATION",
+  "COMPANY_CLOSURE",
+  "MANDATORY_RETIREMENT",
+];
+
+// 연소득 구간의 [하한, 상한] 근사값. 열린 구간(OVER_50M)은 대표 상한을 쓴다.
+const ANNUAL_INCOME_BOUNDS: Partial<Record<AnnualIncomeRange, [number, number]>> = {
+  UNDER_22M: [12_000_000, 22_000_000],
+  UNDER_32M: [22_000_000, 32_000_000],
+  UNDER_44M: [32_000_000, 44_000_000],
+  UNDER_50M: [44_000_000, 50_000_000],
+  OVER_50M: [50_000_000, 70_000_000],
+};
+
+/** 소정급여일수: 고용보험 가입기간 + 연령(50세 이상 우대). */
+function paymentDays(insuranceMonths: number, age: number | null): number {
+  const years = Math.floor(insuranceMonths / 12);
+  const senior = age !== null && age >= 50;
+  if (years < 1) return 120;
+  if (years < 3) return senior ? 180 : 150;
+  if (years < 5) return senior ? 210 : 180;
+  if (years < 10) return senior ? 240 : 210;
+  return senior ? 270 : 240;
+}
+
+function roundTo(value: number, unit: number): number {
+  return Math.round(value / unit) * unit;
+}
+
+function manwon(amount: number): string {
+  // 백엔드 won()·프론트 formatWon()과 동일하게 '만원' 단위는 버림 처리해, 항목 표와 요약 금액이 어긋나지 않게 한다.
+  return `${Math.floor(amount / 10_000).toLocaleString("ko-KR")}만원`;
+}
+
+function rangeLabel(min: number, max: number): string | null {
+  if (max <= 0) return null;
+  const lo = roundTo(min, 100_000);
+  const hi = roundTo(max, 100_000);
+  return lo >= hi ? `약 ${manwon(hi)}` : `약 ${manwon(lo)} ~ ${manwon(hi)}`;
+}
+
 function previewFrom(report: ReportDetail): ReportPreview {
   return {
     reportId: report.reportId,
     summaryTitle: report.summaryTitle,
     summaryMessage: report.summaryMessage,
     totalItemCount: report.items.length,
+    actionableItemCount: report.items.filter((item) => item.eligibilityLevel !== "LOW").length,
+    expectedAmountRangeLabel: report.expectedAmountRangeLabel ?? null,
     paymentStatus: report.paymentStatus,
     locked: report.paymentStatus !== "PAID",
     highlightItems: report.items.slice(0, 2).map((item) => ({
@@ -110,13 +190,224 @@ function previewFrom(report: ReportDetail): ReportPreview {
   };
 }
 
-function reportFromAssessment(payload: AssessmentCreateRequest): ReportDetail {
+function reportFromAssessment(
+  payload: AssessmentCreateRequest,
+  wageOverride?: number | null,
+): ReportDetail {
   const createdAt = now();
   const reportId = Date.now();
-  const unemployed = payload.eventType === "UNEMPLOYMENT";
   const noIncome = payload.currentIncomeStatus === "NONE";
-  const receiveAmount = unemployed ? 7200000 : 0;
-  const monthlySaving = noIncome ? 148000 : 0;
+  // 월급이 입력되면(PDF 저장 단계) 범위 대신 정확값으로 계산한다. 백엔드 estimateWithMonthlyWage와 동일.
+  const wage = wageOverride ?? payload.monthlyAverageWage ?? null;
+  const hasWage = wage != null && wage > 0;
+
+  // 실업급여 자격: 백엔드 UnemploymentBenefitRule과 같은 기준으로 판정한다.
+  const insuranceMonths = payload.employmentInsuranceMonths ?? 0;
+  const insuranceOk = insuranceMonths >= 6;
+  const reasonOk =
+    payload.resignationReason != null &&
+    QUALIFYING_RESIGNATION_REASONS.includes(payload.resignationReason);
+  const unemploymentEligibility: EligibilityLevel = insuranceOk
+    ? reasonOk
+      ? "HIGH"
+      : "NEEDS_CHECK"
+    : "LOW";
+  // 다음 일자리가 확정된 이직은 실업 상태가 아니므로 수급액을 계산하지 않는다.
+  const nextJobConfirmed =
+    payload.eventType === "JOB_CHANGE" && payload.nextJobStatus === "CONFIRMED";
+  const days = paymentDays(insuranceMonths, payload.age ?? null);
+  const unemploymentEstimable = unemploymentEligibility !== "LOW" && !nextJobConfirmed;
+  // 월급이 있으면 구직급여일액(= 월급/30 × 60%, 하한~상한 고정) × 일수로 정확 계산한다.
+  const unempDaily = hasWage
+    ? clampDailyBenefit((wage / DAYS_PER_MONTH) * WAGE_REPLACEMENT_RATE)
+    : 0;
+  const unempMin = !unemploymentEstimable
+    ? 0
+    : hasWage
+      ? unempDaily * days
+      : DAILY_BENEFIT_LOWER * days;
+  const unempMax = !unemploymentEstimable
+    ? 0
+    : hasWage
+      ? unempDaily * days
+      : DAILY_BENEFIT_UPPER * days;
+
+  // 퇴직금: 월급이 있으면 1일 평균임금 × 30 × 근속연수, 없으면 연소득 구간으로 추정.
+  const tenure = payload.tenureYears ?? 0;
+  const incomeBounds = payload.annualIncomeRange
+    ? ANNUAL_INCOME_BOUNDS[payload.annualIncomeRange]
+    : undefined;
+  const severanceEstimable = tenure >= 1 && (hasWage || Boolean(incomeBounds));
+  const wageSeverance = hasWage ? Math.round(wage / DAYS_PER_MONTH) * 30 * tenure : 0;
+  const sevMin = !severanceEstimable
+    ? 0
+    : hasWage
+      ? wageSeverance
+      : Math.floor(incomeBounds![0] / 12) * tenure;
+  const sevMax = !severanceEstimable
+    ? 0
+    : hasWage
+      ? wageSeverance
+      : Math.floor(incomeBounds![1] / 12) * tenure;
+
+  const receiveMin = unempMin + sevMin;
+  const receiveMax = unempMax + sevMax;
+  const receiveTotal = receiveMax > 0 ? roundTo((receiveMin + receiveMax) / 2, 100_000) : 0;
+
+  // 월 절감액: 월급이 있으면 월급 기준, 없으면 연소득 구간 중간값(없으면 기본 월소득)으로 추정한다.
+  const savingBase = hasWage
+    ? wage
+    : incomeBounds
+      ? Math.round((incomeBounds[0] + incomeBounds[1]) / 2 / 12)
+      : DEFAULT_MONTHLY_INCOME;
+  const pensionSaving = noIncome
+    ? Math.round(Math.min(savingBase, PENSION_MONTHLY_INCOME_CAP) * PENSION_RATE)
+    : 0;
+  const healthSaving = Math.round(savingBase * HEALTH_EMPLOYEE_RATE);
+  const monthlySaving = pensionSaving + healthSaving;
+
+  const unempRangeText = rangeLabel(unempMin, unempMax);
+  const sevRangeText = rangeLabel(sevMin, sevMax);
+
+  const items: Omit<ReportItem, "itemId" | "sortOrder">[] = [
+    {
+      procedureType: "UNEMPLOYMENT_BENEFIT",
+      procedureName: "실업급여",
+      eligibilityLevel: unemploymentEligibility,
+      priorityLevel: "HIGH",
+      title: "고용24에서 실업급여 수급 자격을 먼저 확인하세요",
+      reason:
+        "계약 만료·권고사직·폐업·정년퇴직 등 비자발적 퇴사에 가까울수록 신청 가능성이 높습니다.",
+      deadlineText: "퇴사 후 가능한 빨리 워크넷 구직등록과 수급자격 신청을 진행하세요.",
+      officialUrl: "https://www.work24.go.kr",
+      estimate: unemploymentEstimable
+        ? {
+            kind: "RECEIVE",
+            amount: roundTo((unempMin + unempMax) / 2, 100_000),
+            amountLabel: unempRangeText,
+            headline: `실업급여로 ${unempRangeText}을 받을 수 있어요`,
+            detail: hasWage
+              ? `1일 ${unempDaily.toLocaleString("ko-KR")}원 × ${days}일`
+              : `구직급여일액(하한 66,048원~상한 68,100원) × ${days}일 기준이에요. 월급을 입력하면 더 정확해져요.`,
+          }
+        : {
+            kind: "NOT_ESTIMATED",
+            amount: null,
+            amountLabel: null,
+            headline: nextJobConfirmed
+              ? "다음 일자리가 확정되어 수급 대상이 아닐 수 있어요"
+              : "자격 확인이 필요해요",
+            detail: nextJobConfirmed
+              ? "입사 전 공백 기간의 조건은 고용센터에서 확인해보세요."
+              : "고용보험 가입기간(6개월 이상)을 충족하면 예상 금액을 계산해 드려요.",
+          },
+      requiredDocuments: [
+        {
+          documentName: "이직확인서",
+          description: "사업주 제출 여부 확인",
+          issuer: "고용24",
+          required: true,
+        },
+        {
+          documentName: "고용보험 피보험자격 이력",
+          description: "가입기간 확인",
+          issuer: "근로복지공단",
+          required: true,
+        },
+      ],
+    },
+    ...(sevMax > 0
+      ? [
+          {
+            procedureType: "SEVERANCE_PAY",
+            procedureName: "퇴직금",
+            eligibilityLevel: "HIGH",
+            priorityLevel: "MEDIUM",
+            title: "퇴직금 지급액과 지급기한(14일)을 확인하세요",
+            reason:
+              "계속근로기간 1년 이상이면 퇴직금이 발생하고, 퇴직일로부터 14일 이내에 지급되어야 합니다.",
+            deadlineText: "퇴직일로부터 14일 이내 지급이 원칙이에요.",
+            officialUrl: "https://www.moel.go.kr",
+            estimate: {
+              kind: "RECEIVE",
+              amount: roundTo((sevMin + sevMax) / 2, 100_000),
+              amountLabel: sevRangeText,
+              headline: `퇴직금으로 ${sevRangeText}을 받을 수 있어요`,
+              detail: hasWage
+                ? `1일 평균임금 ${Math.round(wage / DAYS_PER_MONTH).toLocaleString("ko-KR")}원 × 30일 × ${tenure}년`
+                : `연소득 구간 기준 월급 추정치 × ${tenure}년으로 계산했어요. 월급을 입력하면 더 정확해져요.`,
+            },
+            requiredDocuments: [
+              {
+                documentName: "퇴직금 산정 내역서",
+                description: "지급액/산정 기준 확인",
+                issuer: "이전 직장",
+                required: false,
+              },
+            ],
+          } satisfies Omit<ReportItem, "itemId" | "sortOrder">,
+        ]
+      : []),
+    {
+      procedureType: "HEALTH_INSURANCE_CONTINUATION",
+      procedureName: "건강보험 임의계속가입",
+      eligibilityLevel: "NEEDS_CHECK",
+      priorityLevel: "MEDIUM",
+      title: "건강보험료가 오르면 임의계속가입을 비교하세요",
+      reason: "직장가입자에서 지역가입자로 바뀌면 보험료가 달라질 수 있습니다.",
+      deadlineText: "지역가입자 보험료 고지 후 신청 가능 기간을 확인하세요.",
+      officialUrl: "https://www.nhis.or.kr",
+      estimate: {
+        kind: "SAVE_MONTHLY",
+        amount: healthSaving,
+        amountLabel: `월 약 ${manwon(healthSaving)}`,
+        headline: "매달 아낄 수 있는 금액이 있을 수 있어요",
+        detail: "이전 직장 보험료와 지역가입 보험료를 비교해야 합니다.",
+      },
+      requiredDocuments: [
+        {
+          documentName: "임의계속가입 신청서",
+          description: "공단 제출",
+          issuer: "국민건강보험공단",
+          required: true,
+        },
+      ],
+    },
+    {
+      procedureType: "NATIONAL_PENSION_EXCEPTION",
+      procedureName: "국민연금 납부예외",
+      eligibilityLevel: noIncome ? "HIGH" : "NEEDS_CHECK",
+      priorityLevel: "LOW",
+      title: "소득 공백이 있으면 국민연금 납부예외를 검토하세요",
+      reason: "현재 소득이 없다면 납부예외 신청으로 현금 유출을 줄일 수 있습니다.",
+      deadlineText: null,
+      officialUrl: "https://www.nps.or.kr",
+      estimate:
+        pensionSaving > 0
+          ? {
+              kind: "SAVE_MONTHLY",
+              amount: pensionSaving,
+              amountLabel: `월 약 ${manwon(pensionSaving)}`,
+              headline: `국민연금 납부예외로 매달 약 ${manwon(pensionSaving)}을 아낄 수 있어요`,
+              detail: "소득 없는 기간 동안 납부를 유예해요. 다만 나중에 받을 연금액은 줄 수 있어요.",
+            }
+          : {
+              kind: "SAVE_MONTHLY",
+              amount: null,
+              amountLabel: null,
+              headline: "월 납부액을 유예할 수 있어요",
+              detail: "소득 신고 상태에 따라 가능 여부가 달라집니다.",
+            },
+      requiredDocuments: [
+        {
+          documentName: "납부예외 신청서",
+          description: "소득 없음 확인",
+          issuer: "국민연금공단",
+          required: true,
+        },
+      ],
+    },
+  ];
 
   return {
     reportId,
@@ -129,6 +420,7 @@ function reportFromAssessment(payload: AssessmentCreateRequest): ReportDetail {
           : "실직 직후 신청 가능한 절차를 우선 정리했어요",
     summaryMessage:
       "입력한 상황을 기준으로 신청 가능성, 마감 위험, 필요 서류를 데모 로드맵으로 구성했어요.",
+    expectedAmountRangeLabel: rangeLabel(receiveMin, receiveMax),
     totalPriorityScore: 8,
     paymentStatus: "UNPAID",
     aiQuestionLimit: 10,
@@ -136,103 +428,18 @@ function reportFromAssessment(payload: AssessmentCreateRequest): ReportDetail {
     aiQuestionRemaining: 10,
     createdAt,
     benefitSummary: {
-      totalReceiveAmount: receiveAmount,
+      totalReceiveAmount: receiveTotal,
       totalMonthlySaving: monthlySaving,
-      receiveItemCount: unemployed ? 1 : 0,
+      receiveItemCount: (unempMax > 0 ? 1 : 0) + (sevMax > 0 ? 1 : 0),
       hasVariable: true,
-      estimated: true,
+      estimated: receiveMax > 0 || monthlySaving > 0,
       basisNote: "데모 계산값입니다. 실제 자격과 금액은 관할 기관에서 확인해야 합니다.",
     },
-    items: [
-      {
-        itemId: 1,
-        procedureType: "UNEMPLOYMENT_BENEFIT",
-        procedureName: "실업급여",
-        eligibilityLevel: unemployed ? "HIGH" : "NEEDS_CHECK",
-        priorityLevel: "HIGH",
-        title: "고용24에서 실업급여 수급 자격을 먼저 확인하세요",
-        reason:
-          "계약 만료·권고사직·폐업 등 비자발적 퇴사에 가까울수록 신청 가능성이 높습니다.",
-        deadlineText: "퇴사 후 가능한 빨리 워크넷 구직등록과 수급자격 신청을 진행하세요.",
-        officialUrl: "https://www.work24.go.kr",
-        sortOrder: 1,
-        estimate: {
-          kind: "RECEIVE",
-          amount: receiveAmount,
-          amountLabel: receiveAmount ? "약 720만원" : null,
-          headline: receiveAmount ? "예상 수령액이 있어요" : "자격 확인이 필요해요",
-          detail: "월 평균임금과 가입기간에 따라 실제 금액은 달라집니다.",
-        },
-        requiredDocuments: [
-          {
-            documentName: "이직확인서",
-            description: "사업주 제출 여부 확인",
-            issuer: "고용24",
-            required: true,
-          },
-          {
-            documentName: "고용보험 피보험자격 이력",
-            description: "가입기간 확인",
-            issuer: "근로복지공단",
-            required: true,
-          },
-        ],
-      },
-      {
-        itemId: 2,
-        procedureType: "HEALTH_INSURANCE_CONTINUATION",
-        procedureName: "건강보험 임의계속가입",
-        eligibilityLevel: "NEEDS_CHECK",
-        priorityLevel: "MEDIUM",
-        title: "건강보험료가 오르면 임의계속가입을 비교하세요",
-        reason: "직장가입자에서 지역가입자로 바뀌면 보험료가 달라질 수 있습니다.",
-        deadlineText: "지역가입자 보험료 고지 후 신청 가능 기간을 확인하세요.",
-        officialUrl: "https://www.nhis.or.kr",
-        sortOrder: 2,
-        estimate: {
-          kind: "SAVE_MONTHLY",
-          amount: monthlySaving,
-          amountLabel: monthlySaving ? "월 약 14.8만원" : null,
-          headline: "매달 아낄 수 있는 금액이 있을 수 있어요",
-          detail: "이전 직장 보험료와 지역가입 보험료를 비교해야 합니다.",
-        },
-        requiredDocuments: [
-          {
-            documentName: "임의계속가입 신청서",
-            description: "공단 제출",
-            issuer: "국민건강보험공단",
-            required: true,
-          },
-        ],
-      },
-      {
-        itemId: 3,
-        procedureType: "NATIONAL_PENSION_EXCEPTION",
-        procedureName: "국민연금 납부예외",
-        eligibilityLevel: noIncome ? "HIGH" : "NEEDS_CHECK",
-        priorityLevel: "LOW",
-        title: "소득 공백이 있으면 국민연금 납부예외를 검토하세요",
-        reason: "현재 소득이 없다면 납부예외 신청으로 현금 유출을 줄일 수 있습니다.",
-        deadlineText: null,
-        officialUrl: "https://www.nps.or.kr",
-        sortOrder: 3,
-        estimate: {
-          kind: "SAVE_MONTHLY",
-          amount: null,
-          amountLabel: null,
-          headline: "월 납부액을 유예할 수 있어요",
-          detail: "소득 신고 상태에 따라 가능 여부가 달라집니다.",
-        },
-        requiredDocuments: [
-          {
-            documentName: "납부예외 신청서",
-            description: "소득 없음 확인",
-            issuer: "국민연금공단",
-            required: true,
-          },
-        ],
-      },
-    ],
+    items: items.map((item, index) => ({
+      ...item,
+      itemId: index + 1,
+      sortOrder: index + 1,
+    })),
     publicBenefits: [
       {
         title: "긴급복지 생계지원",
@@ -338,12 +545,14 @@ export const demoApi = {
       assetRange: payload.assetRange ?? current.assetRange,
       housingType: payload.housingType ?? current.housingType,
       hasDependentChildren: payload.hasDependentChildren ?? current.hasDependentChildren,
+      hasSupportingFamily: payload.hasSupportingFamily ?? current.hasSupportingFamily,
       basicLivelihoodRecipient:
         payload.basicLivelihoodRecipient ?? current.basicLivelihoodRecipient,
       nearPoverty: payload.nearPoverty ?? current.nearPoverty,
       singleParent: payload.singleParent ?? current.singleParent,
       disabledPerson: payload.disabledPerson ?? current.disabledPerson,
     });
+    saveAssessment(payload);
     const report = saveReport(reportFromAssessment(payload));
     return Promise.resolve({
       assessmentId: report.assessmentId,
@@ -396,8 +605,27 @@ export const demoApi = {
     return Promise.resolve(requireReport());
   },
 
-  getPdfReport(_reportId: number, _payload: ReportPdfEstimateRequest): Promise<ReportDetail> {
-    return Promise.resolve(requireReport());
+  getPdfReport(_reportId: number, payload: ReportPdfEstimateRequest): Promise<ReportDetail> {
+    const base = requireReport();
+    const assessment = savedAssessment();
+    // 진단 입력이 없으면(구버전 리포트 등) 저장된 리포트 그대로 반환한다.
+    if (!assessment) {
+      return Promise.resolve(base);
+    }
+    // 월급 유무와 무관하게 진단으로 예상액을 온전히 재계산한다. 월급이 있으면 정확값, 없으면 범위.
+    // (리포트 식별 정보·결제 상태는 원본을 유지한다.)
+    const wage = payload.monthlyAverageWage ?? null;
+    const recomputed = reportFromAssessment(assessment, wage != null && wage > 0 ? wage : null);
+    return Promise.resolve({
+      ...recomputed,
+      reportId: base.reportId,
+      assessmentId: base.assessmentId,
+      paymentStatus: base.paymentStatus,
+      aiQuestionLimit: base.aiQuestionLimit,
+      aiQuestionUsedCount: base.aiQuestionUsedCount,
+      aiQuestionRemaining: base.aiQuestionRemaining,
+      createdAt: base.createdAt,
+    });
   },
 
   fetchDocuments(_reportId: number): Promise<DocumentFetchResponse> {
@@ -434,7 +662,12 @@ export const demoApi = {
     });
   },
 
-  sendChatMessage(_reportId: number, content: string): Promise<ChatMessageCreateResponse> {
+  // 데모 챗도 실제 OpenAI로 답하도록, 저장된 리포트 JSON을 백엔드(/api/ai/report-chat)로 보낸다.
+  // OpenAI 키가 서버에 설정돼 있으면 실제 AI 답변, 없으면 서버가 리포트 요약 기반 폴백을 준다.
+  async sendChatMessage(
+    _reportId: number,
+    content: string,
+  ): Promise<ChatMessageCreateResponse> {
     const messages = readJson<ChatMessage[]>(CHAT_KEY, []);
     const used = Math.floor(messages.length / 2) + 1;
     const userMessage: ChatMessage = {
@@ -443,21 +676,41 @@ export const demoApi = {
       content,
       createdAt: now(),
     };
+
+    let answer =
+      "지금은 답변을 불러오지 못했어요. 잠시 후 다시 시도하거나, 리포트의 우선순위 높은 항목부터 확인해 주세요.";
+    try {
+      const baseUrl =
+        process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+      const res = await fetch(`${baseUrl}/api/ai/report-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: content, report: latestReport() }),
+      });
+      const body = (await res.json()) as {
+        result?: { answer?: string };
+      };
+      if (res.ok && body.result?.answer) {
+        answer = body.result.answer;
+      }
+    } catch {
+      // 네트워크/서버 오류 시 위의 폴백 문구를 그대로 사용한다.
+    }
+
     const aiMessage: ChatMessage = {
       messageId: Date.now() + 1,
       senderType: "AI",
-      content:
-        "데모 답변입니다. 리포트의 우선순위가 높은 항목부터 공식 사이트에서 자격과 마감일을 확인하세요.",
+      content: answer,
       createdAt: now(),
     };
     writeJson(CHAT_KEY, [...messages, userMessage, aiMessage]);
-    return Promise.resolve({
+    return {
       userMessage,
       aiMessage,
       aiQuestionLimit: 10,
       aiQuestionUsedCount: used,
       aiQuestionRemaining: Math.max(0, 10 - used),
-    });
+    };
   },
 
   getCommunityPosts(

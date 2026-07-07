@@ -41,6 +41,17 @@ function PreviewInner({ reportId }: { reportId: number }) {
       <div className="summary-hero">
         <h2>{preview.summaryTitle}</h2>
         <p>{preview.summaryMessage}</p>
+        {preview.expectedAmountRangeLabel && (
+          <div className="hero-benefit">
+            <span className="hero-benefit-label">💰 예상 환급·지원 금액</span>
+            <strong className="hero-benefit-amount">
+              {preview.expectedAmountRangeLabel}
+            </strong>
+            <span className="hero-benefit-note">
+              입력한 상황 기준 추정치 · 항목별 금액은 상세 리포트에서 확인
+            </span>
+          </div>
+        )}
         <div className="score-pill">총 {preview.totalItemCount}개 항목 발견</div>
       </div>
 

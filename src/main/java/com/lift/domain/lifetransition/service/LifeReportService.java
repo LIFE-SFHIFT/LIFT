@@ -14,6 +14,7 @@ import com.lift.domain.lifetransition.repository.LifeReportRepository;
 import com.lift.domain.user.model.UserAccount;
 import com.lift.domain.user.service.UserService;
 import com.lift.global.apiPayload.exception.ProjectException;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -26,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class LifeReportService {
 
-    private static final int REPORT_PRICE = 4_900;
+    private static final Set<Integer> REPORT_PRICES = Set.of(6_900, 13_900);
 
     private final LifeReportAccessManager reportAccessManager;
     private final BenefitEstimationService benefitEstimationService;
@@ -38,7 +39,7 @@ public class LifeReportService {
     @Transactional(readOnly = true)
     public ReportPreviewResDTO getPreview(Authentication authentication, Long reportId) {
         LifeReport report = reportAccessManager.getOwnedReport(authentication, reportId);
-        return ReportPreviewResDTO.from(report);
+        return ReportPreviewResDTO.from(report, benefitEstimationService.previewRangeLabel(report));
     }
 
     @Transactional(readOnly = true)
@@ -132,7 +133,7 @@ public class LifeReportService {
     }
 
     private void validateTossPaymentRequest(Long reportId, TossPaymentConfirmReqDTO request) {
-        if (request.amount() == null || request.amount() != REPORT_PRICE) {
+        if (request.amount() == null || !REPORT_PRICES.contains(request.amount())) {
             throw new ProjectException(LifeTransitionErrorCode.TOSS_PAYMENT_INVALID_REQUEST);
         }
         String expectedPrefix = "LIFT-" + reportId + "-";

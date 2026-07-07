@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  * <ul>
  *     <li>RETIREMENT 또는 UNEMPLOYMENT 이고</li>
  *     <li>고용보험 가입기간 >= 6개월 이고</li>
- *     <li>이직 사유가 CONTRACT_EXPIRED / RECOMMENDED_RESIGNATION / COMPANY_CLOSURE 중 하나면 → HIGH</li>
+ *     <li>이직 사유가 CONTRACT_EXPIRED / RECOMMENDED_RESIGNATION / COMPANY_CLOSURE / MANDATORY_RETIREMENT 중 하나면 → HIGH</li>
  * </ul>
  * 가입기간은 충족하나 사유가 자발적/불명확이면 NEEDS_CHECK, 가입기간 미달이면 LOW.
  */
@@ -28,10 +28,12 @@ public class UnemploymentBenefitRule implements LifeTransitionRule {
 
     private static final int MIN_INSURANCE_MONTHS = 6;
 
+    // 정년퇴직도 고용보험법상 비자발적 이직으로 수급자격 인정 사유다.
     private static final Set<ResignationReason> QUALIFYING_REASONS = Set.of(
             ResignationReason.CONTRACT_EXPIRED,
             ResignationReason.RECOMMENDED_RESIGNATION,
-            ResignationReason.COMPANY_CLOSURE
+            ResignationReason.COMPANY_CLOSURE,
+            ResignationReason.MANDATORY_RETIREMENT
     );
 
     @Override

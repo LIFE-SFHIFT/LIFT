@@ -31,7 +31,7 @@ const FEATURES = [
 function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const [loading, setLoading] = useState<"kakao" | "naver" | null>(null);
+  const [loading, setLoading] = useState<"kakao" | "naver" | "demo" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,8 +47,18 @@ function LoginInner() {
   }
 
   function handleDemoLogin() {
-    startDemoSession();
-    router.replace("/onboarding/life-event");
+    setLoading("demo");
+    setError(null);
+
+    // 데모는 백엔드 소셜 로그인을 타지 않고 브라우저 로컬 데모 세션으로 바로 체험한다.
+    // (실제 kakao/naver 자격증명이 설정되면 백엔드 mock 콜백은 state 검증에 막히므로 로컬 데모가 안전하다.)
+    try {
+      startDemoSession();
+      router.replace("/onboarding/life-event");
+    } catch {
+      setError("데모 로그인 중 문제가 발생했어요.");
+      setLoading(null);
+    }
   }
 
   return (
@@ -106,7 +116,7 @@ function LoginInner() {
           onClick={handleDemoLogin}
         >
           <span className="btn-ico">▶</span>
-          데모용 로그인으로 바로 체험하기
+          {loading === "demo" ? "데모 로그인 중…" : "데모용 로그인으로 바로 체험하기"}
         </button>
         <p className="quota" style={{ marginTop: 4 }}>
           계속하면 <Link href="/terms">이용약관</Link>과{" "}

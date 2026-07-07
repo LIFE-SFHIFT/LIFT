@@ -17,6 +17,8 @@ public record ReportPreviewResDTO(
         String summaryTitle,
         String summaryMessage,
         int totalItemCount,
+        int actionableItemCount,
+        String expectedAmountRangeLabel,
         PaymentStatus paymentStatus,
         boolean locked,
         List<HighlightItem> highlightItems,
@@ -43,8 +45,11 @@ public record ReportPreviewResDTO(
         }
     }
 
-    public static ReportPreviewResDTO from(LifeReport report) {
+    public static ReportPreviewResDTO from(LifeReport report, String expectedAmountRangeLabel) {
         int totalItemCount = report.getItems().size();
+        int actionableItemCount = (int) report.getItems().stream()
+                .filter(item -> item.getEligibilityLevel() != EligibilityLevel.LOW)
+                .count();
 
         List<HighlightItem> highlights = report.getItems().stream()
                 .limit(HIGHLIGHT_LIMIT)
@@ -61,6 +66,8 @@ public record ReportPreviewResDTO(
                 report.getSummaryTitle(),
                 report.getSummaryMessage(),
                 totalItemCount,
+                actionableItemCount,
+                expectedAmountRangeLabel,
                 report.getPaymentStatus(),
                 !report.isPaid(),
                 highlights,

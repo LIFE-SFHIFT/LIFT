@@ -1,14 +1,38 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
 import { api, ApiError } from "@/lib/api";
+import {
+  eligibilityLabel,
+  eligibilityTone,
+  priorityLabel,
+  priorityTone,
+} from "@/lib/labels";
+import type { ReportPreview } from "@/lib/types";
 
-const PRICE = 4900;
 const TOSS_CLIENT_KEY = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY ?? "";
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
+
+const REPORT_PLANS = [
+  {
+    id: "basic",
+    name: "기본 리포트",
+    price: 6900,
+    summary: "신청 가능 항목, 우선순위, 필요 서류와 공식 링크를 확인해요.",
+  },
+  {
+    id: "plus",
+    name: "확장 리포트",
+    price: 13900,
+    summary: "기본 리포트에 AI 질문 10회와 PDF 저장용 금액 계산까지 함께 봐요.",
+  },
+] as const;
+
+type ReportPlan = (typeof REPORT_PLANS)[number];
+type PlanId = ReportPlan["id"];
 
 type TossPaymentRequest = {
   method: "CARD";
@@ -76,13 +100,57 @@ function CheckoutInner() {
   const router = useRouter();
   const params = useSearchParams();
   const reportId = Number(params.get("reportId"));
+  const [selectedPlanId, setSelectedPlanId] = useState<PlanId>("basic");
+  const [preview, setPreview] = useState<ReportPreview | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(true);
   const [processing, setProcessing] = useState<"mock" | "toss" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tossReady = TOSS_CLIENT_KEY.startsWith("test_ck_");
+  const selectedPlan = useMemo(
+    () => REPORT_PLANS.find((plan) => plan.id === selectedPlanId) ?? REPORT_PLANS[0],
+    [selectedPlanId],
+  );
+  const payable = Boolean(preview && preview.actionableItemCount > 0);
+
+  useEffect(() => {
+    if (!reportId) {
+      setLoadingPreview(false);
+      setError("리포트 정보가 없습니다. 미리보기 화면에서 다시 시도해주세요.");
+      return;
+    }
+
+    let mounted = true;
+    setLoadingPreview(true);
+    api
+      .getPreview(reportId)
+      .then((data) => {
+        if (!mounted) return;
+        if (data.paymentStatus === "PAID") {
+          router.replace(`/report/${reportId}`);
+          return;
+        }
+        setPreview(data);
+      })
+      .catch((e) => {
+        if (!mounted) return;
+        setError(e instanceof ApiError ? e.message : "신청 가능 항목을 불러오지 못했어요.");
+      })
+      .finally(() => {
+        if (mounted) setLoadingPreview(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [reportId, router]);
 
   async function handleMockPay() {
     if (!reportId) {
       setError("리포트 정보가 없습니다. 미리보기 화면에서 다시 시도해주세요.");
+      return;
+    }
+    if (!payable) {
+      setError("신청 가능 항목이 확인된 뒤 결제할 수 있어요.");
       return;
     }
     setProcessing("mock");
@@ -99,6 +167,10 @@ function CheckoutInner() {
   async function handleTossPay() {
     if (!reportId) {
       setError("리포트 정보가 없습니다. 미리보기 화면에서 다시 시도해주세요.");
+      return;
+    }
+    if (!payable) {
+      setError("신청 가능 항목이 확인된 뒤 결제할 수 있어요.");
       return;
     }
     if (!tossReady) {
@@ -123,9 +195,9 @@ function CheckoutInner() {
 
       await payment.requestPayment({
         method: "CARD",
-        amount: { currency: "KRW", value: PRICE },
+        amount: { currency: "KRW", value: selectedPlan.price },
         orderId,
-        orderName: "생애전환 맞춤 상세 리포트",
+        orderName: `생애전환 맞춤 ${selectedPlan.name}`,
         successUrl: `${origin}/checkout/toss/success?reportId=${reportId}`,
         failUrl: `${origin}/checkout/toss/fail?reportId=${reportId}`,
       });
@@ -140,27 +212,86 @@ function CheckoutInner() {
       <p className="step-hint">STEP 4 · 결제</p>
       <h1 className="page-title">상세 리포트 결제</h1>
       <p className="page-sub">
-        결제하면 모든 항목의 상세 사유, 필요 서류, 공식 신청 링크와 AI 질문(10회)이 열립니다.
+        결제 전에 신청 가능 항목을 먼저 확인하고, 원하는 리포트 플랜을 선택해 주세요.
       </p>
 
       {error && <div className="error-box">{error}</div>}
 
+      <div className="card checkout-apply-card">
+        <div className="checkout-section-head">
+          <div>
+            <p className="checkout-eyebrow">결제 전 확인</p>
+            <h2>지금 신청 검토할 수 있는 항목</h2>
+          </div>
+          {preview && <span className="checkout-count">{preview.actionableItemCount}개</span>}
+        </div>
+
+        {loadingPreview ? (
+          <p className="quota" style={{ marginTop: 12 }}>
+            신청 가능 항목을 확인하고 있어요.
+          </p>
+        ) : preview && preview.actionableItemCount > 0 ? (
+          <>
+            <p className="quota" style={{ marginTop: 8 }}>
+              {preview.summaryMessage}
+            </p>
+            <div className="checkout-highlight-list">
+              {preview.highlightItems.map((item) => (
+                <div key={item.procedureType} className="checkout-highlight">
+                  <div className="checkout-highlight-title">
+                    <span>{item.procedureName}</span>
+                    <b>{item.title}</b>
+                  </div>
+                  <div className="badge-row">
+                    <span className={`badge ${eligibilityTone(item.eligibilityLevel)}`}>
+                      {eligibilityLabel[item.eligibilityLevel]}
+                    </span>
+                    <span className={`badge ${priorityTone(item.priorityLevel)}`}>
+                      {priorityLabel[item.priorityLevel]}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {preview.totalItemCount > preview.highlightItems.length && (
+              <p className="quota" style={{ marginTop: 10 }}>
+                외 {preview.totalItemCount - preview.highlightItems.length}개 항목도 결제 후 함께 열립니다.
+              </p>
+            )}
+          </>
+        ) : (
+          <div className="warning-box">
+            입력하신 정보로는 현재 신청 가능성이 높거나 확인 필요한 항목이 없습니다. 결제 전에
+            정보를 다시 확인해 주세요.
+          </div>
+        )}
+      </div>
+
+      <div className="checkout-plan-grid">
+        {REPORT_PLANS.map((plan) => (
+          <button
+            key={plan.id}
+            type="button"
+            className={`card checkout-plan ${selectedPlanId === plan.id ? "selected" : ""}`}
+            onClick={() => setSelectedPlanId(plan.id)}
+            disabled={processing !== null}
+          >
+            <span className="checkout-plan-name">{plan.name}</span>
+            <strong>{plan.price.toLocaleString()}원</strong>
+            <span className="checkout-plan-summary">{plan.summary}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15 }}>
-          <span>생애전환 맞춤 상세 리포트</span>
-          <b>{PRICE.toLocaleString()}원</b>
+        <div className="checkout-price-row">
+          <span>선택한 플랜</span>
+          <b>{selectedPlan.name}</b>
         </div>
         <div className="divider" />
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 17,
-            fontWeight: 700,
-          }}
-        >
+        <div className="checkout-price-row total">
           <span>결제 금액</span>
-          <span>{PRICE.toLocaleString()}원</span>
+          <span>{selectedPlan.price.toLocaleString()}원</span>
         </div>
       </div>
 
@@ -177,7 +308,7 @@ function CheckoutInner() {
         <button
           type="button"
           className="btn"
-          disabled={processing !== null}
+          disabled={processing !== null || loadingPreview || !payable}
           onClick={handleMockPay}
           style={{ marginTop: 12 }}
         >
@@ -193,7 +324,7 @@ function CheckoutInner() {
         <button
           type="button"
           className="btn secondary"
-          disabled={processing !== null || !tossReady}
+          disabled={processing !== null || !tossReady || loadingPreview || !payable}
           onClick={handleTossPay}
           style={{ marginTop: 12 }}
         >

@@ -128,6 +128,7 @@ public class PublicBenefitRecommendationService {
         context.put("eventType", value(assessment.getEventType()));
         context.put("resignationReason", value(assessment.getResignationReason()));
         context.put("nextJobStatus", value(assessment.getNextJobStatus()));
+        context.put("nextJobStartDate", text(assessment.getNextJobStartDate()));
         context.put("employmentInsuranceMonths", assessment.getEmploymentInsuranceMonths());
         context.put("currentIncomeStatus", value(assessment.getCurrentIncomeStatus()));
         context.put("regionSido", text(assessment.getRegionSido()));
@@ -139,6 +140,7 @@ public class PublicBenefitRecommendationService {
         context.put("assetRange", value(assessment.getAssetRange()));
         context.put("housingType", value(assessment.getHousingType()));
         context.put("hasDependentChildren", assessment.getHasDependentChildren());
+        context.put("hasSupportingFamily", assessment.getHasSupportingFamily());
         context.put("basicLivelihoodRecipient", assessment.getBasicLivelihoodRecipient());
         context.put("nearPoverty", assessment.getNearPoverty());
         context.put("singleParent", assessment.getSingleParent());

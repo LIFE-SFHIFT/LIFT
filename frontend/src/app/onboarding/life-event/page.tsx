@@ -9,13 +9,28 @@ import { api, ApiError } from "@/lib/api";
 import { eventTypeDescription, eventTypeLabel } from "@/lib/labels";
 import type { LifeEventType } from "@/lib/types";
 
-const EVENTS: LifeEventType[] = ["RETIREMENT", "JOB_CHANGE", "UNEMPLOYMENT"];
+const EVENTS: LifeEventType[] = ["RETIREMENT", "JOB_CHANGE"];
 
 const EVENT_ICON: Record<LifeEventType, string> = {
   RETIREMENT: "🧳",
   JOB_CHANGE: "🔄",
   UNEMPLOYMENT: "🌧️",
 };
+
+const LOCKED_EVENTS = [
+  {
+    key: "marriage",
+    label: "결혼",
+    description: "신혼·주거·가구 변화 지원은 준비 중이에요.",
+    icon: "💍",
+  },
+  {
+    key: "parental-leave",
+    label: "출산휴가",
+    description: "출산휴가·육아휴직 지원 안내는 곧 열릴 예정이에요.",
+    icon: "🍼",
+  },
+];
 
 function LifeEventInner() {
   const router = useRouter();
@@ -65,6 +80,22 @@ function LifeEventInner() {
               <span className="ev-check">{selected === event ? "✓" : ""}</span>
             </div>
             <div className="ev-desc">{eventTypeDescription[event]}</div>
+          </button>
+        ))}
+        {LOCKED_EVENTS.map((event) => (
+          <button
+            key={event.key}
+            type="button"
+            className="card selectable locked"
+            disabled
+            style={{ marginBottom: 12 }}
+          >
+            <div className="opt-head-row">
+              <span className="ev-ico">{event.icon}</span>
+              <span className="title">{event.label}</span>
+              <span className="ev-lock">준비 중</span>
+            </div>
+            <div className="ev-desc">{event.description}</div>
           </button>
         ))}
       </div>

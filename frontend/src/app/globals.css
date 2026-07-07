@@ -208,6 +208,39 @@ p.page-sub {
   margin-top: 4px;
 }
 
+.selectable.locked,
+.selectable.locked:hover,
+.selectable.locked:active {
+  cursor: not-allowed;
+  transform: none;
+  border-color: #d9dee8;
+  background: #f3f5f8;
+  box-shadow: none;
+  color: #858b98;
+}
+
+.selectable.locked .ev-ico {
+  background: #e7eaf0;
+  filter: grayscale(1);
+  opacity: 0.78;
+}
+
+.selectable.locked .ev-desc,
+.selectable.locked .title {
+  color: #8b93a1;
+}
+
+.ev-lock {
+  margin-left: auto;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #e2e6ee;
+  color: #6b7280;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .field {
   margin-bottom: 16px;
 }
@@ -263,6 +296,10 @@ p.page-sub {
   cursor: not-allowed;
 }
 
+.btn:disabled:hover {
+  background: var(--primary);
+}
+
 .btn.secondary {
   background: #eef1f6;
   color: var(--text);
@@ -270,6 +307,10 @@ p.page-sub {
 
 .btn.secondary:hover {
   background: #e4e8ef;
+}
+
+.btn.secondary:disabled:hover {
+  background: #eef1f6;
 }
 
 .btn.kakao {
@@ -341,6 +382,172 @@ p.page-sub {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+.checkout-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.checkout-section-head h2 {
+  margin: 2px 0 0;
+  font-size: 18px;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.checkout-eyebrow {
+  margin: 0;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.checkout-count {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #111827;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.checkout-highlight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.checkout-highlight {
+  border: 1px solid #e5eaf2;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fbfcfe;
+}
+
+.checkout-highlight .badge-row {
+  margin-bottom: 0;
+}
+
+.checkout-highlight-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.checkout-highlight-title span {
+  color: var(--text-sub);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.checkout-highlight-title b {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+
+.checkout-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  align-items: stretch;
+  gap: 12px;
+  margin: 14px 0 12px;
+}
+
+.checkout-plan {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  padding: 22px 22px 24px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+
+.checkout-plan:hover {
+  border-color: var(--primary);
+}
+
+.checkout-plan:active {
+  transform: scale(0.99);
+}
+
+.checkout-plan.selected {
+  border-color: var(--primary);
+  background: #f4f8ff;
+  box-shadow: 0 0 0 2px rgba(47, 107, 255, 0.18);
+}
+
+.checkout-plan:disabled {
+  cursor: not-allowed;
+}
+
+.checkout-plan-name {
+  color: var(--text-sub);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.checkout-plan strong {
+  display: block;
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1.15;
+  letter-spacing: 0;
+  margin: 6px 0 8px;
+}
+
+.checkout-plan-summary {
+  color: var(--text-sub);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.checkout-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.checkout-price-row.total {
+  font-size: 17px;
+  font-weight: 800;
+  padding: 4px 2px;
+}
+
+.checkout-price-row.total span:last-child {
+  font-size: 22px;
+  line-height: 1.2;
+  padding-left: 8px;
+}
+
+@media (max-width: 520px) {
+  .checkout-plan-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: 1fr;
+  }
+
+  .checkout-plan {
+    min-height: 168px;
+  }
+
+  .checkout-price-row {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 
 .item-reason {
@@ -454,6 +661,36 @@ p.page-sub {
   opacity: 0.95;
 }
 
+.hero-benefit {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hero-benefit-label {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.hero-benefit-amount {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.hero-benefit-note {
+  font-size: 11px;
+  opacity: 0.8;
+  line-height: 1.5;
+}
+
 .locked-veil {
   position: relative;
   overflow: hidden;
@@ -474,6 +711,16 @@ p.page-sub {
   padding: 12px 14px;
   font-size: 14px;
   margin-bottom: 16px;
+}
+
+.warning-box {
+  background: #fff8e8;
+  color: #8a5b08;
+  border: 1px solid #ffe2a8;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .chat-log {
@@ -789,6 +1036,12 @@ p.page-sub {
   border: 1px solid #d5ebdc;
 }
 
+.resignation-options .opt[data-option="MANDATORY_RETIREMENT"] .opt-ico {
+  color: #256b47;
+  background: #edf8f1;
+  border: 1px solid #d5ebdc;
+}
+
 .resignation-options .opt[data-option="COMPANY_CLOSURE"] .opt-ico {
   color: #9a5b08;
   background: #fff5e6;
@@ -830,6 +1083,24 @@ p.page-sub {
   word-break: keep-all;
   white-space: nowrap;
   line-height: 1.35;
+}
+
+/* 폼 라벨 옆 보조 안내(예: "· 복수 선택 가능") */
+.label-hint {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-sub);
+}
+
+/* 연소득처럼 긴 구간명 칩은 줄바꿈을 허용해 모바일에서 잘리거나 넘치지 않게 한다. */
+.income-range-select .opt.opt-chip {
+  min-height: 46px;
+  height: auto;
+}
+
+.income-range-select .opt.opt-chip .opt-label {
+  white-space: normal;
+  word-break: keep-all;
 }
 
 /* 개월 스테퍼 */
@@ -990,7 +1261,7 @@ p.page-sub {
 /* ===== 커스텀 달력 팝오버 ===== */
 .cal-pop {
   position: absolute;
-  z-index: 30;
+  z-index: 90;
   left: 0;
   right: 0;
   margin-top: 8px;
@@ -2584,7 +2855,7 @@ p.page-sub {
 
 .roadmap-card {
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .roadmap-band {
@@ -2593,6 +2864,7 @@ p.page-sub {
   padding: 20px 22px 18px;
   background: linear-gradient(135deg, #182642, #27407a);
   color: #fff;
+  border-radius: 20px 20px 0 0;
 }
 
 .roadmap-band::after {
@@ -2674,6 +2946,10 @@ p.page-sub {
   margin-bottom: 26px;
 }
 
+.roadmap-date-followup {
+  margin-top: -6px;
+}
+
 .btn.grad {
   background: linear-gradient(135deg, #4a80ff, #2f6bff);
   box-shadow: 0 10px 24px rgba(47, 107, 255, 0.32);
@@ -2684,6 +2960,12 @@ p.page-sub {
 .btn.grad:hover {
   filter: brightness(1.06);
   transform: translateY(-1px);
+}
+
+.btn.grad:disabled:hover {
+  background: linear-gradient(135deg, #4a80ff, #2f6bff);
+  filter: none;
+  transform: none;
 }
 
 @media (min-width: 961px) {
@@ -3997,8 +4279,53 @@ p.page-sub {
   margin-top: 16px;
 }
 
+.pdf-preview-page {
+  min-height: 100vh;
+  padding: 18px;
+  background: #e9edf4;
+}
+
+.pdf-preview-toolbar {
+  position: sticky;
+  top: 12px;
+  z-index: 20;
+  max-width: 794px;
+  margin: 0 auto 14px;
+  display: grid;
+  grid-template-columns: 0.72fr 1fr;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.pdf-preview-shell .pdf-doc {
+  display: block;
+  max-width: 794px;
+  margin: 0 auto;
+}
+
+.pdf-preview-shell .pdf-page {
+  min-height: 1123px;
+  padding: 18px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(16, 24, 40, 0.16);
+}
+
 @media (max-width: 420px) {
   .pdf-choice-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .pdf-preview-page {
+    padding: 10px;
+  }
+
+  .pdf-preview-toolbar {
+    top: 8px;
     grid-template-columns: 1fr;
   }
 }
@@ -4075,6 +4402,9 @@ p.page-sub {
     background: #fff !important;
     background-image: none !important;
   }
+  .no-print {
+    display: none !important;
+  }
   /* 화면용 UI(상단바·히어로·버튼 등)와 Next 오버레이는 인쇄에서 제외하고 PDF 문서만 남긴다 */
   .app-shell > *:not(.pdf-doc) {
     display: none !important;
@@ -4090,6 +4420,20 @@ p.page-sub {
     display: block !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+  .pdf-preview-page {
+    min-height: auto;
+    padding: 0;
+    background: #fff !important;
+  }
+  .pdf-preview-shell .pdf-doc {
+    max-width: none;
+    margin: 0;
+  }
+  .pdf-preview-shell .pdf-page {
+    min-height: auto;
+    padding: 0;
+    box-shadow: none;
   }
 }
 

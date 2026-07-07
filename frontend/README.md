@@ -48,5 +48,6 @@
 
 ## MVP 참고
 
-- AI/소셜 로그인은 mock 기본값입니다. 결제는 데모 mock과 토스 테스트 결제 모드를 함께 제공합니다.
+- 소셜 로그인은 로컬에서 mock OAuth로 동작합니다. 실제 OpenAI 챗봇을 테스트하려면 백엔드 `.env`에 `OPENAI_ENABLED=true`, `OPENAI_API_KEY=...`를 넣고 데모용 로그인, 카카오, 네이버 시작 버튼 중 하나로 로그인하세요.
+- `데모용 로그인으로 바로 체험하기`도 백엔드 mock OAuth 토큰을 받아 실제 API와 OpenAI 챗봇 경로를 사용합니다. 결제는 데모 mock과 토스 테스트 결제 모드를 함께 제공합니다.
 - 토큰을 localStorage에 보관하므로, 실서비스 전환 시 httpOnly 쿠키 등으로 교체하세요.

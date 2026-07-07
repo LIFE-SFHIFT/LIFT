@@ -2,6 +2,7 @@ package com.lift.domain.lifetransition.service;
 
 import com.lift.domain.lifetransition.dto.response.BenefitEstimateResDTO;
 import com.lift.domain.lifetransition.dto.response.BenefitSummaryResDTO;
+import com.lift.domain.lifetransition.enumtype.AnnualIncomeRange;
 import com.lift.domain.lifetransition.enumtype.BenefitEstimateKind;
 import com.lift.domain.lifetransition.enumtype.EligibilityLevel;
 import com.lift.domain.lifetransition.enumtype.ProcedureType;
@@ -61,6 +62,96 @@ public class BenefitEstimationService {
      */
     public ReportEstimation estimateWithoutMonthlyWage(LifeReport report) {
         return estimate(report, null);
+    }
+
+    /**
+     * 결제 전 미리보기에 노출할 예상 수령액 범위 문구(예: "약 990만원 ~ 1,430만원").
+     *
+     * <p>월급을 아직 입력받지 않은 시점에도 계산할 수 있도록, 진단 필수 입력만으로
+     * 산출 가능한 범위를 쓴다. 실업급여는 구직급여일액이 법정 하한~상한 사이로 고정되므로
+     * 가입기간·나이만으로 범위가 나오고, 퇴직금은 연소득 구간 × 근속연수로 추정한다.
+     * 어떤 항목도 계산할 수 없으면 null을 반환한다.
+     */
+    public String previewRangeLabel(LifeReport report) {
+        LifeAssessment a = report.getAssessment();
+        Integer wage = a.getMonthlyAverageWage();
+
+        long min = 0;
+        long max = 0;
+        for (ReportItem item : report.getItems()) {
+            AmountRange range = switch (item.getProcedureType()) {
+                case UNEMPLOYMENT_BENEFIT -> unemploymentRange(item, a, wage);
+                case SEVERANCE_PAY -> severanceRange(a, wage);
+                default -> null;
+            };
+            if (range != null) {
+                min += range.min();
+                max += range.max();
+            }
+        }
+        if (max <= 0) {
+            return null;
+        }
+
+        long lo = roundTo(min, 100_000);
+        long hi = roundTo(max, 100_000);
+        return lo >= hi ? "약 " + won(hi) : "약 " + won(lo) + " ~ " + won(hi);
+    }
+
+    /** 실업급여 예상 범위. 월급이 있으면 정확값, 없으면 법정 하한~상한 일액 기준. */
+    private AmountRange unemploymentRange(ReportItem item, LifeAssessment a, Integer wage) {
+        if (item.getEligibilityLevel() == EligibilityLevel.LOW) {
+            return null;
+        }
+        int days = paymentDays(a.getEmploymentInsuranceMonths(), a.getAge());
+        if (wage != null && wage > 0) {
+            long total = clampDailyBenefit(wage / DAYS_PER_MONTH * WAGE_REPLACEMENT_RATE) * days;
+            return new AmountRange(total, total);
+        }
+        return new AmountRange(UNEMPLOYMENT_DAILY_LOWER * days, UNEMPLOYMENT_DAILY_UPPER * days);
+    }
+
+    /** 퇴직금 예상 범위. 월급이 있으면 정확값, 없으면 연소득 구간으로 추정. */
+    private AmountRange severanceRange(LifeAssessment a, Integer wage) {
+        Integer tenure = a.getTenureYears();
+        if (tenure == null || tenure < 1) {
+            return null;
+        }
+        if (wage != null && wage > 0) {
+            long total = Math.round(wage / DAYS_PER_MONTH) * 30 * tenure;
+            return new AmountRange(total, total);
+        }
+        long[] bounds = annualIncomeBounds(a.getAnnualIncomeRange());
+        if (bounds == null) {
+            return null;
+        }
+        return new AmountRange(bounds[0] / 12 * tenure, bounds[1] / 12 * tenure);
+    }
+
+    /**
+     * 연소득 구간을 [하한, 상한] 원 단위로 근사한다. 열린 구간(OVER_50M)은 대표 상한을 쓰고,
+     * 소득 정보가 없으면 null.
+     */
+    private static long[] annualIncomeBounds(AnnualIncomeRange range) {
+        if (range == null) {
+            return null;
+        }
+        return switch (range) {
+            case UNDER_22M -> new long[]{12_000_000L, 22_000_000L};
+            case UNDER_32M -> new long[]{22_000_000L, 32_000_000L};
+            case UNDER_44M -> new long[]{32_000_000L, 44_000_000L};
+            case UNDER_50M -> new long[]{44_000_000L, 50_000_000L};
+            case OVER_50M -> new long[]{50_000_000L, 70_000_000L};
+            case UNKNOWN, NONE -> null;
+        };
+    }
+
+    private static long roundTo(long value, long unit) {
+        return Math.round(value / (double) unit) * unit;
+    }
+
+    /** 예상 금액의 [하한, 상한] 범위. */
+    private record AmountRange(long min, long max) {
     }
 
     private ReportEstimation estimate(LifeReport report, Integer wage) {
@@ -127,12 +218,24 @@ public class BenefitEstimationService {
                     "현재 조건으로는 수급이 어려울 수 있어요",
                     "고용보험 가입기간이 부족해 예상 금액을 계산하지 않았어요.");
         }
+
+        int days = paymentDays(a.getEmploymentInsuranceMonths(), a.getAge());
         if (wage == null || wage <= 0) {
-            return notEstimatedByWage();
+            // 구직급여일액은 법정 하한~상한 사이로 고정되므로 월급 없이도 범위를 계산할 수 있다.
+            long min = UNEMPLOYMENT_DAILY_LOWER * days;
+            long max = UNEMPLOYMENT_DAILY_UPPER * days;
+            long mid = roundTo((min + max) / 2, 100_000);
+            String rangeLabel = "약 " + won(roundTo(min, 100_000)) + "~" + won(roundTo(max, 100_000));
+            return new BenefitEstimateResDTO(
+                    BenefitEstimateKind.RECEIVE,
+                    mid,
+                    rangeLabel,
+                    "실업급여로 " + rangeLabel + "을 받을 수 있어요",
+                    String.format("구직급여일액(하한 %s원~상한 %s원) × %d일 기준이에요. 월급을 입력하면 더 정확해져요.",
+                            comma(UNEMPLOYMENT_DAILY_LOWER), comma(UNEMPLOYMENT_DAILY_UPPER), days));
         }
 
         long dailyBenefit = clampDailyBenefit(wage / DAYS_PER_MONTH * WAGE_REPLACEMENT_RATE);
-        int days = paymentDays(a.getEmploymentInsuranceMonths(), a.getAge());
         long total = dailyBenefit * days;
 
         String detail = String.format("1일 %s원 × %d일", comma(dailyBenefit), days);
@@ -147,7 +250,7 @@ public class BenefitEstimationService {
     /** 퇴직금 ≈ 1일 평균임금 × 30 × 근속연수 ≈ 월급 × 근속연수. */
     private BenefitEstimateResDTO estimateSeverance(LifeAssessment a, Integer wage) {
         Integer tenure = a.getTenureYears();
-        if (wage == null || wage <= 0 || tenure == null) {
+        if (tenure == null) {
             return notEstimatedByWage();
         }
         if (tenure < 1) {
@@ -155,6 +258,23 @@ public class BenefitEstimationService {
                     BenefitEstimateKind.NOT_ESTIMATED, null, null,
                     "근속 1년 미만은 퇴직금 대상이 아닐 수 있어요",
                     "근속연수가 1년 이상일 때 법정 퇴직금이 발생해요.");
+        }
+
+        if (wage == null || wage <= 0) {
+            long[] bounds = annualIncomeBounds(a.getAnnualIncomeRange());
+            if (bounds == null) {
+                return notEstimatedByWage();
+            }
+            long min = bounds[0] / 12 * tenure;
+            long max = bounds[1] / 12 * tenure;
+            long mid = roundTo((min + max) / 2, 100_000);
+            String rangeLabel = "약 " + won(roundTo(min, 100_000)) + "~" + won(roundTo(max, 100_000));
+            return new BenefitEstimateResDTO(
+                    BenefitEstimateKind.RECEIVE,
+                    mid,
+                    rangeLabel,
+                    "퇴직금으로 " + rangeLabel + "을 받을 수 있어요",
+                    String.format("연소득 구간 기준 월급 추정치 × %d년으로 계산했어요. 월급을 입력하면 더 정확해져요.", tenure));
         }
 
         long dailyAvg = Math.round(wage / DAYS_PER_MONTH);

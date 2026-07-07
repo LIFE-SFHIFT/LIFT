@@ -29,6 +29,10 @@ public class SocialOAuthClient {
     private final RestClient.Builder restClientBuilder;
 
     public SocialUserProfile getUserProfile(SocialProvider provider, String code, String state) {
+        if (oAuthProperties.isMockEnabled() && code.startsWith("mock-")) {
+            return createDevelopmentProfile(provider, code);
+        }
+
         OAuthProperties.ProviderRegistration registration = oAuthProperties.getRegistration(provider);
         if (registration == null || !registration.isConfigured()) {
             if (oAuthProperties.isMockEnabled()) {

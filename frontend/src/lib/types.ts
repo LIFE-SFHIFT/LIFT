@@ -5,18 +5,17 @@ export type CommunityCategory = LifeEventType;
 export type ResignationReason =
   | "CONTRACT_EXPIRED"
   | "RECOMMENDED_RESIGNATION"
+  | "MANDATORY_RETIREMENT"
   | "PERSONAL_REASON"
   | "FIRED"
   | "COMPANY_CLOSURE"
   | "UNKNOWN";
 export type NextJobStatus = "CONFIRMED" | "NOT_CONFIRMED" | "UNKNOWN";
 export type CurrentIncomeStatus = "NONE" | "HAS_INCOME" | "UNKNOWN";
-export type HouseholdType =
-  | "UNKNOWN"
-  | "SINGLE"
-  | "COUPLE"
-  | "WITH_CHILDREN"
-  | "SUPPORTING_FAMILY";
+// 가구 형태는 단일 선택 4종. 자녀/부양가족은 별도 boolean(hasDependentChildren,
+// hasSupportingFamily)으로 분리했다. 예전 WITH_CHILDREN/SUPPORTING_FAMILY 저장값은
+// normalizeHouseholdSelection에서 새 구조로 변환한다.
+export type HouseholdType = "UNKNOWN" | "SINGLE" | "COUPLE" | "OTHER";
 export type AnnualIncomeRange =
   | "UNKNOWN"
   | "NONE"
@@ -71,6 +70,7 @@ export interface UserProfile {
   assetRange: AssetRange | null;
   housingType: HousingType | null;
   hasDependentChildren: boolean | null;
+  hasSupportingFamily: boolean | null;
   basicLivelihoodRecipient: boolean | null;
   nearPoverty: boolean | null;
   singleParent: boolean | null;
@@ -91,6 +91,7 @@ export interface UserProfileUpdateRequest {
   assetRange?: AssetRange | null;
   housingType?: HousingType | null;
   hasDependentChildren?: boolean | null;
+  hasSupportingFamily?: boolean | null;
   basicLivelihoodRecipient?: boolean | null;
   nearPoverty?: boolean | null;
   singleParent?: boolean | null;
@@ -131,6 +132,7 @@ export interface AssessmentCreateRequest {
   retirementDate?: string | null;
   resignationReason?: ResignationReason | null;
   nextJobStatus?: NextJobStatus | null;
+  nextJobStartDate?: string | null;
   employmentInsuranceMonths?: number | null;
   currentIncomeStatus?: CurrentIncomeStatus | null;
   regionSido?: string | null;
@@ -143,6 +145,7 @@ export interface AssessmentCreateRequest {
   assetRange?: AssetRange | null;
   housingType?: HousingType | null;
   hasDependentChildren?: boolean | null;
+  hasSupportingFamily?: boolean | null;
   basicLivelihoodRecipient?: boolean | null;
   nearPoverty?: boolean | null;
   singleParent?: boolean | null;
@@ -192,6 +195,8 @@ export interface ReportPreview {
   summaryTitle: string;
   summaryMessage: string;
   totalItemCount: number;
+  actionableItemCount: number;
+  expectedAmountRangeLabel: string | null;
   paymentStatus: PaymentStatus;
   locked: boolean;
   highlightItems: HighlightItem[];
@@ -260,6 +265,8 @@ export interface ReportDetail {
   assessmentId: number;
   summaryTitle: string;
   summaryMessage: string;
+  /** 데모 모드에서 미리보기 금액 범위를 재사용하기 위한 필드. 백엔드 응답에는 없다. */
+  expectedAmountRangeLabel?: string | null;
   totalPriorityScore: number;
   paymentStatus: PaymentStatus;
   aiQuestionLimit: number;

@@ -26,6 +26,7 @@ public record UserProfileUpdateReqDTO(
         AssetRange assetRange,
         HousingType housingType,
         Boolean hasDependentChildren,
+        Boolean hasSupportingFamily,
         Boolean basicLivelihoodRecipient,
         Boolean nearPoverty,
         Boolean singleParent,

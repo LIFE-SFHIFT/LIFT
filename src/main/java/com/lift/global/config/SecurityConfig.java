@@ -45,7 +45,9 @@ public class SecurityConfig {
             "/api/auth/refresh",
             // access token이 만료된 상태에서도 refresh token 폐기가 가능해야 한다.
             "/api/auth/logout",
-            "/api/terms/**"
+            "/api/terms/**",
+            // 데모(비로그인) 체험용 퇴직 챗봇. 리포트는 요청 본문으로 받는다.
+            "/api/ai/report-chat"
     };
 
     @Bean

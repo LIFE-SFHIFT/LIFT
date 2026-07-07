@@ -22,6 +22,7 @@ export const eventTypeDescription: Record<LifeEventType, string> = {
 export const resignationReasonLabel: Record<ResignationReason, string> = {
   CONTRACT_EXPIRED: "계약 만료",
   RECOMMENDED_RESIGNATION: "권고사직",
+  MANDATORY_RETIREMENT: "정년퇴직",
   PERSONAL_REASON: "개인 사정",
   FIRED: "해고",
   COMPANY_CLOSURE: "회사 폐업",

@@ -3,6 +3,7 @@ package com.lift.domain.auth.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.lift.domain.auth.enumtype.SocialProvider;
 import com.lift.global.apiPayload.exception.ProjectException;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -40,5 +41,24 @@ class SocialOAuthClientTest {
                 "parseNaverProfile",
                 Map.of("response", "malformed")
         )).isInstanceOf(ProjectException.class);
+    }
+
+    @Test
+    void mockLoginCodeUsesDevelopmentProfileEvenWhenProviderIsConfigured() {
+        OAuthProperties properties = new OAuthProperties();
+        properties.setMockEnabled(true);
+        properties.getKakao().setClientId("configured-client-id");
+        properties.getKakao().setTokenUri("http://127.0.0.1:1/unreachable");
+
+        SocialOAuthClient client = new SocialOAuthClient(properties, RestClient.builder());
+
+        SocialUserProfile profile = client.getUserProfile(
+                SocialProvider.KAKAO,
+                "mock-kakao-login",
+                null
+        );
+
+        assertThat(profile.email()).endsWith("@kakao.com");
+        assertThat(profile.nickname()).isEqualTo("살림 챙김러");
     }
 }

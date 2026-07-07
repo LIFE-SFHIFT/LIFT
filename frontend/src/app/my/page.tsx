@@ -8,8 +8,20 @@ import { DateField } from "@/components/DateField";
 import { MonthStepper } from "@/components/MonthStepper";
 import { OptionSelector, type Option } from "@/components/OptionSelector";
 import { RegionField } from "@/components/RegionField";
+import { TogglePill } from "@/components/TogglePill";
 import { api, ApiError } from "@/lib/api";
 import { eventTypeLabel } from "@/lib/labels";
+import {
+  ASSET_OPTIONS,
+  EVENT_OPTIONS,
+  HOUSEHOLD_OPTIONS,
+  HOUSING_OPTIONS,
+  INCOME_OPTIONS,
+  INCOME_RANGE_OPTIONS,
+  NEXT_JOB_OPTIONS,
+  RESIGNATION_OPTIONS,
+  normalizeHouseholdSelection,
+} from "@/lib/assessmentOptions";
 import type {
   AnnualIncomeRange,
   AssetRange,
@@ -22,65 +34,6 @@ import type {
   UserProfile,
 } from "@/lib/types";
 
-const EVENT_OPTIONS: Option<LifeEventType>[] = [
-  { value: "JOB_CHANGE", label: "이직", desc: "다음 일자리로 이동 중", icon: "→" },
-  { value: "RETIREMENT", label: "퇴직", desc: "퇴직 후 정산과 신청 준비", icon: "✓" },
-  { value: "UNEMPLOYMENT", label: "실직", desc: "갑작스러운 소득 공백", icon: "!" },
-];
-
-const RESIGNATION_OPTIONS: Option<ResignationReason>[] = [
-  { value: "CONTRACT_EXPIRED", label: "계약 만료", icon: "종료" },
-  { value: "RECOMMENDED_RESIGNATION", label: "권고사직", icon: "권유" },
-  { value: "COMPANY_CLOSURE", label: "회사 폐업", icon: "폐업" },
-  { value: "PERSONAL_REASON", label: "개인 사정", icon: "개인" },
-  { value: "FIRED", label: "해고", icon: "해고" },
-  { value: "UNKNOWN", label: "기타", icon: "기타" },
-];
-
-const NEXT_JOB_OPTIONS: Option<NextJobStatus>[] = [
-  { value: "NOT_CONFIRMED", label: "아직 미정" },
-  { value: "CONFIRMED", label: "확정됨" },
-  { value: "UNKNOWN", label: "모름" },
-];
-
-const INCOME_OPTIONS: Option<CurrentIncomeStatus>[] = [
-  { value: "NONE", label: "소득 없음" },
-  { value: "HAS_INCOME", label: "소득 있음" },
-  { value: "UNKNOWN", label: "모름" },
-];
-
-const HOUSEHOLD_OPTIONS: Option<HouseholdType>[] = [
-  { value: "UNKNOWN", label: "모름" },
-  { value: "SINGLE", label: "1인 가구" },
-  { value: "COUPLE", label: "부부" },
-  { value: "WITH_CHILDREN", label: "자녀 있음" },
-  { value: "SUPPORTING_FAMILY", label: "부양가족 있음" },
-];
-
-const INCOME_RANGE_OPTIONS: Option<AnnualIncomeRange>[] = [
-  { value: "UNKNOWN", label: "모름" },
-  { value: "NONE", label: "없음" },
-  { value: "UNDER_22M", label: "2,200만원 이하" },
-  { value: "UNDER_32M", label: "3,200만원 이하" },
-  { value: "UNDER_44M", label: "4,400만원 이하" },
-  { value: "UNDER_50M", label: "5,000만원 이하" },
-  { value: "OVER_50M", label: "5,000만원 초과" },
-];
-
-const ASSET_OPTIONS: Option<AssetRange>[] = [
-  { value: "UNKNOWN", label: "모름" },
-  { value: "UNDER_240M", label: "2.4억원 이하" },
-  { value: "OVER_240M", label: "2.4억원 초과" },
-];
-
-const HOUSING_OPTIONS: Option<HousingType>[] = [
-  { value: "UNKNOWN", label: "모름" },
-  { value: "MONTHLY_RENT", label: "월세" },
-  { value: "JEONSE", label: "전세" },
-  { value: "OWNED", label: "자가" },
-  { value: "FAMILY", label: "가족 거주" },
-];
-
 const DEFAULT_PROFILE = {
   householdType: "UNKNOWN" as HouseholdType,
   annualIncomeRange: "UNKNOWN" as AnnualIncomeRange,
@@ -90,28 +43,6 @@ const DEFAULT_PROFILE = {
 
 const RING_RADIUS = 30;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-
-function TogglePill({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      className={`toggle-pill ${checked ? "on" : ""}`}
-      aria-pressed={checked}
-      onClick={() => onChange(!checked)}
-    >
-      <span className="toggle-dot">{checked ? "✓" : ""}</span>
-      {label}
-    </button>
-  );
-}
 
 function toNum(value: string): number | null {
   const digits = value.replace(/[^\d]/g, "");
@@ -166,6 +97,7 @@ function MyPageInner() {
   const [assetRange, setAssetRange] = useState<AssetRange>(DEFAULT_PROFILE.assetRange);
   const [housingType, setHousingType] = useState<HousingType>(DEFAULT_PROFILE.housingType);
   const [hasDependentChildren, setHasDependentChildren] = useState(false);
+  const [hasSupportingFamily, setHasSupportingFamily] = useState(false);
   const [basicLivelihoodRecipient, setBasicLivelihoodRecipient] = useState(false);
   const [nearPoverty, setNearPoverty] = useState(false);
   const [singleParent, setSingleParent] = useState(false);
@@ -177,6 +109,7 @@ function MyPageInner() {
   const [resignationReason, setResignationReason] =
     useState<ResignationReason>("CONTRACT_EXPIRED");
   const [nextJobStatus, setNextJobStatus] = useState<NextJobStatus>("NOT_CONFIRMED");
+  const [nextJobStartDate, setNextJobStartDate] = useState("");
   const [insuranceMonths, setInsuranceMonths] = useState<number | null>(12);
   const [incomeStatus, setIncomeStatus] = useState<CurrentIncomeStatus>("NONE");
   const [age, setAge] = useState("");
@@ -190,13 +123,20 @@ function MyPageInner() {
         setNickname(data.nickname ?? "");
         setRegionSido(data.sido ?? "");
         setRegionSigungu(data.sigungu ?? "");
-        setHouseholdType(data.householdType ?? DEFAULT_PROFILE.householdType);
+        // 예전에 householdType으로 저장된 자녀/부양가족 값을 새 구조로 변환해 채운다.
+        const household = normalizeHouseholdSelection(
+          data.householdType,
+          Boolean(data.hasDependentChildren),
+          Boolean(data.hasSupportingFamily),
+        );
+        setHouseholdType(household.householdType);
+        setHasDependentChildren(household.hasDependentChildren);
+        setHasSupportingFamily(household.hasSupportingFamily);
         setAnnualIncomeRange(
           data.annualIncomeRange ?? DEFAULT_PROFILE.annualIncomeRange,
         );
         setAssetRange(data.assetRange ?? DEFAULT_PROFILE.assetRange);
         setHousingType(data.housingType ?? DEFAULT_PROFILE.housingType);
-        setHasDependentChildren(Boolean(data.hasDependentChildren));
         setBasicLivelihoodRecipient(Boolean(data.basicLivelihoodRecipient));
         setNearPoverty(Boolean(data.nearPoverty));
         setSingleParent(Boolean(data.singleParent));
@@ -214,6 +154,12 @@ function MyPageInner() {
     const frame = requestAnimationFrame(() => setRingReady(true));
     return () => cancelAnimationFrame(frame);
   }, [loading]);
+
+  useEffect(() => {
+    if (nextJobStatus !== "CONFIRMED") {
+      setNextJobStartDate("");
+    }
+  }, [nextJobStatus]);
 
   const score = useMemo(
     () =>
@@ -243,6 +189,7 @@ function MyPageInner() {
         assetRange,
         housingType,
         hasDependentChildren,
+        hasSupportingFamily,
         basicLivelihoodRecipient,
         nearPoverty,
         singleParent,
@@ -268,6 +215,7 @@ function MyPageInner() {
         retirementDate: retirementDate || null,
         resignationReason,
         nextJobStatus,
+        nextJobStartDate: nextJobStatus === "CONFIRMED" ? nextJobStartDate || null : null,
         employmentInsuranceMonths: insuranceMonths,
         currentIncomeStatus: incomeStatus,
         regionSido: regionSido || null,
@@ -280,6 +228,7 @@ function MyPageInner() {
         assetRange,
         housingType,
         hasDependentChildren,
+        hasSupportingFamily,
         basicLivelihoodRecipient,
         nearPoverty,
         singleParent,
@@ -403,38 +352,44 @@ function MyPageInner() {
               />
             </div>
 
-            <div className="two-col">
-              <div className="form-block compact">
-                <label className="form-label">가구 형태</label>
-                <OptionSelector
-                  options={HOUSEHOLD_OPTIONS}
-                  value={householdType}
-                  onChange={setHouseholdType}
-                  variant="chip"
-                  columns={2}
+            <div className="form-block compact">
+              <label className="form-label">가구 형태</label>
+              <OptionSelector
+                options={HOUSEHOLD_OPTIONS}
+                value={householdType}
+                onChange={setHouseholdType}
+                variant="chip"
+                columns={2}
+              />
+            </div>
+
+            <div className="form-block compact">
+              <label className="form-label">
+                가구원 정보 <span className="label-hint">· 복수 선택 가능</span>
+              </label>
+              <div className="toggle-grid">
+                <TogglePill
+                  checked={hasDependentChildren}
+                  onChange={setHasDependentChildren}
+                  label="자녀 있음"
                 />
-              </div>
-              <div className="form-block compact">
-                <label className="form-label">주거 형태</label>
-                <OptionSelector
-                  options={HOUSING_OPTIONS}
-                  value={housingType}
-                  onChange={setHousingType}
-                  variant="chip"
-                  columns={2}
+                <TogglePill
+                  checked={hasSupportingFamily}
+                  onChange={setHasSupportingFamily}
+                  label="부양가족 있음"
                 />
               </div>
             </div>
 
             <div className="two-col">
-              <div className="form-block compact">
+              <div className="form-block compact income-range-select">
                 <label className="form-label">연소득 범위</label>
                 <OptionSelector
                   options={INCOME_RANGE_OPTIONS}
                   value={annualIncomeRange}
                   onChange={setAnnualIncomeRange}
                   variant="chip"
-                  columns={2}
+                  columns={1}
                 />
               </div>
               <div className="form-block compact">
@@ -444,19 +399,25 @@ function MyPageInner() {
                   value={assetRange}
                   onChange={setAssetRange}
                   variant="chip"
-                  columns={3}
+                  columns={1}
                 />
               </div>
             </div>
 
             <div className="form-block compact">
-              <label className="form-label">해당 조건</label>
+              <label className="form-label">주거 형태</label>
+              <OptionSelector
+                options={HOUSING_OPTIONS}
+                value={housingType}
+                onChange={setHousingType}
+                variant="chip"
+                columns={2}
+              />
+            </div>
+
+            <div className="form-block compact">
+              <label className="form-label">해당되는 항목</label>
               <div className="toggle-grid">
-                <TogglePill
-                  checked={hasDependentChildren}
-                  onChange={setHasDependentChildren}
-                  label="부양자녀 있음"
-                />
                 <TogglePill
                   checked={basicLivelihoodRecipient}
                   onChange={setBasicLivelihoodRecipient}
@@ -487,7 +448,7 @@ function MyPageInner() {
                 value={eventType}
                 onChange={setEventType}
                 variant="chip"
-                columns={3}
+                columns={2}
               />
             </div>
 
@@ -534,6 +495,13 @@ function MyPageInner() {
                 />
               </div>
             </div>
+
+            {nextJobStatus === "CONFIRMED" && (
+              <div className="form-block roadmap-date-followup">
+                <label className="form-label">다음 일자리 시작일</label>
+                <DateField value={nextJobStartDate} onChange={setNextJobStartDate} />
+              </div>
+            )}
 
             <div className="wage-row">
               <div className="form-block">

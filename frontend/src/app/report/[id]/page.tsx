@@ -7,7 +7,6 @@ import { AppShell } from "@/components/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
 import { EligibilityBadge } from "@/components/Badges";
 import { IdentityVerifyModal } from "@/components/IdentityVerifyModal";
-import { ReportPdfDocument } from "@/components/ReportPdfDocument";
 import { api, ApiError } from "@/lib/api";
 import { priorityLabel } from "@/lib/labels";
 import type {
@@ -310,7 +309,6 @@ function ReportInner({ reportId }: { reportId: number }) {
   const [autoCount, setAutoCount] = useState(0);
   const [showVerify, setShowVerify] = useState(false);
   const [verifiedName, setVerifiedName] = useState<string | null>(null);
-  const [pdfReport, setPdfReport] = useState<ReportDetail | null>(null);
   const [showPdfOptions, setShowPdfOptions] = useState(false);
   const [pdfWage, setPdfWage] = useState("");
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -378,22 +376,15 @@ function ReportInner({ reportId }: { reportId: number }) {
     fetchDocuments();
   }
 
-  async function printPdfVersion(monthlyAverageWage: number | null) {
+  function openPdfVersion(monthlyAverageWage: number | null) {
     setPdfError(null);
     setPdfLoading(monthlyAverageWage == null ? "without-wage" : "with-wage");
-    try {
-      const nextReport = await api.getPdfReport(
-        reportId,
-        monthlyAverageWage == null ? {} : { monthlyAverageWage },
-      );
-      setPdfReport(nextReport);
-      setShowPdfOptions(false);
-      window.setTimeout(() => window.print(), 80);
-    } catch (e) {
-      setPdfError(e instanceof ApiError ? e.message : "PDF 금액을 계산하지 못했어요.");
-    } finally {
-      setPdfLoading(null);
-    }
+    const query =
+      monthlyAverageWage == null
+        ? ""
+        : `?monthlyAverageWage=${encodeURIComponent(String(monthlyAverageWage))}`;
+    setShowPdfOptions(false);
+    router.push(`/report/${reportId}/pdf${query}`);
   }
 
   function handlePrintWithWage() {
@@ -402,7 +393,7 @@ function ReportInner({ reportId }: { reportId: number }) {
       setPdfError("월 평균임금을 입력해 주세요.");
       return;
     }
-    void printPdfVersion(monthlyAverageWage);
+    openPdfVersion(monthlyAverageWage);
   }
 
   if (error) return <div className="error-box">{error}</div>;
@@ -423,17 +414,26 @@ function ReportInner({ reportId }: { reportId: number }) {
     <>
       <p className="step-hint">STEP 5 · 나의 행정 로드맵</p>
 
-      {summary?.estimated ? (
+      {summary?.estimated &&
+      (summary.totalReceiveAmount > 0 || summary.totalMonthlySaving > 0) ? (
         <div className="benefit-hero">
-          <span className="bh-kicker">💰 이 로드맵으로 받을 수 있는 돈</span>
-          <div className="bh-amount">
-            약 {formatWon(summary.totalReceiveAmount)}
-          </div>
-          <div className="bh-sub">
-            지금 신청 가능한 {summary.receiveItemCount}가지 혜택의 예상 수령액을 합친
-            금액이에요. 아래에서 항목별 금액을 확인하세요.
-          </div>
-          {summary.totalMonthlySaving > 0 && (
+          <span className="bh-kicker">
+            💰 이 로드맵으로 {summary.totalReceiveAmount > 0 ? "받을 수 있는 돈" : "아낄 수 있는 돈"}
+          </span>
+          {summary.totalReceiveAmount > 0 ? (
+            <>
+              <div className="bh-amount">
+                약 {formatWon(summary.totalReceiveAmount)}
+              </div>
+              <div className="bh-sub">
+                지금 신청 가능한 {summary.receiveItemCount}가지 혜택의 예상 수령액을 합친
+                금액이에요. 아래에서 항목별 금액을 확인하세요.
+              </div>
+            </>
+          ) : (
+            <div className="bh-amount">매달 약 {formatWon(summary.totalMonthlySaving)}</div>
+          )}
+          {summary.totalReceiveAmount > 0 && summary.totalMonthlySaving > 0 && (
             <div className="bh-saving">
               여기에 더해 매달 <b>약 {formatWon(summary.totalMonthlySaving)}</b>씩 아낄 수
               있어요
@@ -531,32 +531,6 @@ function ReportInner({ reportId }: { reportId: number }) {
               </button>
             </div>
 
-            <div className="pdf-choice-cards">
-              <button
-                type="button"
-                className="pdf-choice-card strong"
-                onClick={() => {
-                  setPdfError(null);
-                  const input = document.querySelector<HTMLInputElement>(".pdf-choice-sheet input");
-                  input?.focus();
-                }}
-              >
-                <div className="pdf-choice-label">추천</div>
-                <div className="pdf-choice-title">월급 입력 PDF</div>
-                <p>실업급여, 국민연금, 건강보험, 퇴직금 금액을 실제 숫자로 계산합니다.</p>
-              </button>
-              <button
-                type="button"
-                className="pdf-choice-card"
-                disabled={pdfLoading !== null}
-                onClick={() => printPdfVersion(null)}
-              >
-                <div className="pdf-choice-label">기본</div>
-                <div className="pdf-choice-title">월급 없이 PDF</div>
-                <p>개인 급여 정보 없이 예상 범위와 계산 기준 중심으로 저장합니다.</p>
-              </button>
-            </div>
-
             <label className="idv-label">월 평균임금(세전)</label>
             <div className="won-input">
               <input
@@ -587,7 +561,7 @@ function ReportInner({ reportId }: { reportId: number }) {
                 type="button"
                 className="btn secondary"
                 disabled={pdfLoading !== null}
-                onClick={() => printPdfVersion(null)}
+                onClick={() => openPdfVersion(null)}
               >
                 {pdfLoading === "without-wage" ? "준비 중…" : "월급 없이 저장"}
               </button>
@@ -639,8 +613,6 @@ function ReportInner({ reportId }: { reportId: number }) {
           예상 수령액 리포트 PDF로 저장
         </button>
       </div>
-
-      <ReportPdfDocument report={pdfReport ?? report} />
     </>
   );
 }
