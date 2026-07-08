@@ -102,6 +102,43 @@ class LifeAssessmentControllerTest {
     }
 
     @Test
+    void 기본리포트는_상세만_열리고_AI와_PDF는_확장리포트에서만_가능하다() throws Exception {
+        long reportId = analyzeAndGetReportId(createRetirementAssessment());
+
+        mockMvc.perform(authorized(post("/api/life/reports/" + reportId + "/payments/mock-complete"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "plan", "BASIC",
+                                "amount", 6_900
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.paymentPlan").value("BASIC"))
+                .andExpect(jsonPath("$.result.paymentAmount").value(6_900))
+                .andExpect(jsonPath("$.result.aiChatAvailable").value(false))
+                .andExpect(jsonPath("$.result.pdfAvailable").value(false));
+
+        mockMvc.perform(authorized(get("/api/life/reports/" + reportId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.paymentStatus").value("PAID"))
+                .andExpect(jsonPath("$.result.paymentPlan").value("BASIC"))
+                .andExpect(jsonPath("$.result.aiQuestionLimit").value(0))
+                .andExpect(jsonPath("$.result.aiChatAvailable").value(false))
+                .andExpect(jsonPath("$.result.pdfAvailable").value(false));
+
+        mockMvc.perform(authorized(post("/api/life/reports/" + reportId + "/pdf-estimate"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("LIFE403_4"));
+
+        mockMvc.perform(authorized(post("/api/life/reports/" + reportId + "/chat/messages"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("content", "실업급여는 언제 신청하나요?"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("LIFE403_4"));
+    }
+
+    @Test
     void 토스결제_승인은_금액과_주문번호를_먼저_검증한다() throws Exception {
         long reportId = analyzeAndGetReportId(createRetirementAssessment());
 

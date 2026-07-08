@@ -46,3 +46,5 @@ services:
         value: false
       - key: OPENAI_ENABLED
         value: false
+      - key: OPENAI_MODEL
+        value: gpt-5.4-mini

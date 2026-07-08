@@ -41,7 +41,11 @@ public class TossPaymentClient {
                     .retrieve()
                     .body(TossPaymentConfirmation.class);
 
-            if (confirmation == null || !paymentKey.equals(confirmation.paymentKey())) {
+            if (confirmation == null
+                    || !paymentKey.equals(confirmation.paymentKey())
+                    || !orderId.equals(confirmation.orderId())
+                    || !amount.equals(confirmation.totalAmount())
+                    || !"DONE".equals(confirmation.status())) {
                 throw new ProjectException(LifeTransitionErrorCode.TOSS_PAYMENT_CONFIRM_FAILED);
             }
             return confirmation;

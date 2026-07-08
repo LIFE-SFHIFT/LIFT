@@ -37,7 +37,7 @@ public class OpenAiResponsesClient {
     private final RestClient.Builder restClientBuilder;
     private final OpenAiProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    // gpt-5.5 같은 추론 모델은 응답 생성에 수십 초가 걸릴 수 있어, 기본 읽기 타임아웃으로는
+    // gpt-5.4-mini 같은 추론 모델은 응답 생성에 수십 초가 걸릴 수 있어, 기본 읽기 타임아웃으로는
     // 간헐적으로 "Read timed out"이 나며 규칙 폴백으로 빠진다. 넉넉한 타임아웃을 명시한다.
     private final ClientHttpRequestFactory requestFactory = createRequestFactory();
 

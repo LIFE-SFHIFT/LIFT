@@ -1,5 +1,6 @@
 package com.lift.domain.lifetransition.service;
 
+import com.lift.domain.lifetransition.dto.request.ReportPaymentCompleteReqDTO;
 import com.lift.domain.lifetransition.dto.request.ReportPdfEstimateReqDTO;
 import com.lift.domain.lifetransition.dto.request.TossPaymentConfirmReqDTO;
 import com.lift.domain.lifetransition.dto.response.LatestChatReportResDTO;
@@ -8,13 +9,13 @@ import com.lift.domain.lifetransition.dto.response.LifeReportResDTO;
 import com.lift.domain.lifetransition.dto.response.ReportPaymentResDTO;
 import com.lift.domain.lifetransition.dto.response.ReportPreviewResDTO;
 import com.lift.domain.lifetransition.enumtype.PaymentStatus;
+import com.lift.domain.lifetransition.enumtype.ReportPlanType;
 import com.lift.domain.lifetransition.exception.LifeTransitionErrorCode;
 import com.lift.domain.lifetransition.model.LifeReport;
 import com.lift.domain.lifetransition.repository.LifeReportRepository;
 import com.lift.domain.user.model.UserAccount;
 import com.lift.domain.user.service.UserService;
 import com.lift.global.apiPayload.exception.ProjectException;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -26,8 +27,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class LifeReportService {
-
-    private static final Set<Integer> REPORT_PRICES = Set.of(6_900, 13_900);
 
     private final LifeReportAccessManager reportAccessManager;
     private final BenefitEstimationService benefitEstimationService;
@@ -46,10 +45,13 @@ public class LifeReportService {
     public LatestChatReportResDTO getLatestChatReport(Authentication authentication) {
         UserAccount user = userService.getCurrentUser(authentication);
         return lifeReportRepository
-                .findFirstByAssessment_UserAccount_IdAndPaymentStatusOrderByPaidAtDescIdDesc(
+                .findByAssessment_UserAccount_IdAndPaymentStatusOrderByPaidAtDescIdDesc(
                         user.getId(),
                         PaymentStatus.PAID
                 )
+                .stream()
+                .filter(LifeReport::canUseAiChat)
+                .findFirst()
                 .map(LatestChatReportResDTO::from)
                 .orElseGet(LatestChatReportResDTO::empty);
     }
@@ -67,9 +69,16 @@ public class LifeReportService {
      * MVP용 결제 완료 mock. 실제 토스페이먼츠 연동 없이 결제 상태만 PAID로 전환한다.
      */
     @Transactional
-    public ReportPaymentResDTO completeMockPayment(Authentication authentication, Long reportId) {
+    public ReportPaymentResDTO completeMockPayment(
+            Authentication authentication,
+            Long reportId,
+            ReportPaymentCompleteReqDTO request
+    ) {
         LifeReport report = reportAccessManager.getOwnedReport(authentication, reportId);
-        report.markPaid();
+        ReportPlanType plan = resolveMockPaymentPlan(request);
+        Integer amount = request == null || request.amount() == null ? plan.getPrice() : request.amount();
+
+        report.markPaid(plan, amount);
         report.getAssessment().markPaid();
         return ReportPaymentResDTO.from(report);
     }
@@ -84,7 +93,7 @@ public class LifeReportService {
             TossPaymentConfirmReqDTO request
     ) {
         LifeReport report = reportAccessManager.getOwnedReport(authentication, reportId);
-        validateTossPaymentRequest(reportId, request);
+        ReportPlanType plan = validateTossPaymentRequest(reportId, request);
         if (report.isPaid()) {
             return ReportPaymentResDTO.from(report);
         }
@@ -94,8 +103,9 @@ public class LifeReportService {
                 request.orderId(),
                 request.amount()
         );
+        validateTossConfirmation(request, confirmation);
 
-        report.markTossTestPaid(confirmation.orderId(), confirmation.paymentKey());
+        report.markTossTestPaid(plan, request.amount(), confirmation.orderId(), confirmation.paymentKey());
         report.getAssessment().markPaid();
         return ReportPaymentResDTO.from(report);
     }
@@ -123,7 +133,7 @@ public class LifeReportService {
             Long reportId,
             ReportPdfEstimateReqDTO request
     ) {
-        LifeReport report = reportAccessManager.getPaidOwnedReport(authentication, reportId);
+        LifeReport report = reportAccessManager.getPlusPaidOwnedReport(authentication, reportId);
         Integer monthlyAverageWage = request == null ? null : request.monthlyAverageWage();
         BenefitEstimationService.ReportEstimation estimation = monthlyAverageWage == null
                 ? benefitEstimationService.estimateWithoutMonthlyWage(report)
@@ -132,13 +142,46 @@ public class LifeReportService {
         return LifeReportResDTO.from(report, estimation, gov24PublicBenefitService.findBenefits(report));
     }
 
-    private void validateTossPaymentRequest(Long reportId, TossPaymentConfirmReqDTO request) {
-        if (request.amount() == null || !REPORT_PRICES.contains(request.amount())) {
+    private ReportPlanType resolveMockPaymentPlan(ReportPaymentCompleteReqDTO request) {
+        if (request == null) {
+            return ReportPlanType.PLUS;
+        }
+
+        ReportPlanType plan = request.plan() != null
+                ? request.plan()
+                : ReportPlanType.findByPrice(request.amount());
+        if (plan == null) {
+            throw new ProjectException(LifeTransitionErrorCode.PAYMENT_PLAN_INVALID_REQUEST);
+        }
+        validatePlanAmount(plan, request.amount(), LifeTransitionErrorCode.PAYMENT_PLAN_INVALID_REQUEST);
+        return plan;
+    }
+
+    private ReportPlanType validateTossPaymentRequest(Long reportId, TossPaymentConfirmReqDTO request) {
+        ReportPlanType plan = ReportPlanType.findByPrice(request.amount());
+        if (plan == null) {
             throw new ProjectException(LifeTransitionErrorCode.TOSS_PAYMENT_INVALID_REQUEST);
         }
         String expectedPrefix = "LIFT-" + reportId + "-";
         if (request.orderId() == null || !request.orderId().startsWith(expectedPrefix)) {
             throw new ProjectException(LifeTransitionErrorCode.TOSS_PAYMENT_INVALID_REQUEST);
+        }
+        return plan;
+    }
+
+    private void validatePlanAmount(ReportPlanType plan, Integer amount, LifeTransitionErrorCode errorCode) {
+        if (amount != null && amount != plan.getPrice()) {
+            throw new ProjectException(errorCode);
+        }
+    }
+
+    private void validateTossConfirmation(TossPaymentConfirmReqDTO request, TossPaymentConfirmation confirmation) {
+        if (confirmation == null
+                || !request.paymentKey().equals(confirmation.paymentKey())
+                || !request.orderId().equals(confirmation.orderId())
+                || !request.amount().equals(confirmation.totalAmount())
+                || !"DONE".equals(confirmation.status())) {
+            throw new ProjectException(LifeTransitionErrorCode.TOSS_PAYMENT_CONFIRM_FAILED);
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.lift.domain.lifetransition.model;
 
 import com.lift.domain.lifetransition.enumtype.PaymentStatus;
+import com.lift.domain.lifetransition.enumtype.ReportPlanType;
 import com.lift.global.common.entity.BaseCreatedEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -32,8 +33,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class LifeReport extends BaseCreatedEntity {
 
-    private static final int DEFAULT_AI_QUESTION_LIMIT = 10;
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -54,6 +53,13 @@ public class LifeReport extends BaseCreatedEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_status", nullable = false, length = 20)
     private PaymentStatus paymentStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_plan", length = 20)
+    private ReportPlanType paymentPlan;
+
+    @Column(name = "payment_amount")
+    private Integer paymentAmount;
 
     @Column(name = "ai_question_limit", nullable = false)
     private int aiQuestionLimit;
@@ -88,7 +94,7 @@ public class LifeReport extends BaseCreatedEntity {
         this.summaryMessage = summaryMessage;
         this.totalPriorityScore = totalPriorityScore;
         this.paymentStatus = PaymentStatus.UNPAID;
-        this.aiQuestionLimit = DEFAULT_AI_QUESTION_LIMIT;
+        this.aiQuestionLimit = 0;
         this.aiQuestionUsedCount = 0;
     }
 
@@ -106,16 +112,27 @@ public class LifeReport extends BaseCreatedEntity {
         item.assignReport(this);
     }
 
-    public void markPaid() {
-        markPaid("MOCK", null, null);
+    public void markPaid(ReportPlanType plan, Integer amount) {
+        markPaid("MOCK", plan, amount, null, null);
     }
 
-    public void markTossTestPaid(String orderId, String paymentKey) {
-        markPaid("TOSS_TEST", orderId, paymentKey);
+    public void markTossTestPaid(ReportPlanType plan, Integer amount, String orderId, String paymentKey) {
+        markPaid("TOSS_TEST", plan, amount, orderId, paymentKey);
     }
 
-    private void markPaid(String provider, String orderId, String paymentKey) {
+    private void markPaid(
+            String provider,
+            ReportPlanType plan,
+            Integer amount,
+            String orderId,
+            String paymentKey
+    ) {
+        ReportPlanType resolvedPlan = plan == null ? ReportPlanType.PLUS : plan;
         this.paymentStatus = PaymentStatus.PAID;
+        this.paymentPlan = resolvedPlan;
+        this.paymentAmount = amount == null ? resolvedPlan.getPrice() : amount;
+        this.aiQuestionLimit = resolvedPlan.getAiQuestionLimit();
+        this.aiQuestionUsedCount = Math.min(aiQuestionUsedCount, aiQuestionLimit);
         this.paymentProvider = provider;
         this.paymentOrderId = orderId;
         this.paymentKey = paymentKey;
@@ -124,6 +141,29 @@ public class LifeReport extends BaseCreatedEntity {
 
     public boolean isPaid() {
         return paymentStatus == PaymentStatus.PAID;
+    }
+
+    public ReportPlanType getResolvedPaymentPlan() {
+        if (paymentPlan != null) {
+            return paymentPlan;
+        }
+        return isPaid() ? ReportPlanType.PLUS : null;
+    }
+
+    public Integer getResolvedPaymentAmount() {
+        if (paymentAmount != null) {
+            return paymentAmount;
+        }
+        ReportPlanType resolvedPlan = getResolvedPaymentPlan();
+        return resolvedPlan == null ? null : resolvedPlan.getPrice();
+    }
+
+    public boolean canUseAiChat() {
+        return isPaid() && getResolvedPaymentPlan() == ReportPlanType.PLUS;
+    }
+
+    public boolean canUsePdfEstimate() {
+        return isPaid() && getResolvedPaymentPlan() == ReportPlanType.PLUS;
     }
 
     public boolean isAiQuestionLimitReached() {

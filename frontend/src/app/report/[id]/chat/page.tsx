@@ -32,6 +32,11 @@ function ChatInner({ reportId }: { reportId: number }) {
           router.replace(`/report/${reportId}/preview`);
           return;
         }
+        if (e instanceof ApiError && e.code === "LIFE403_4") {
+          setError("AI 질문은 확장 리포트 결제 후 이용할 수 있어요.");
+          setLoaded(true);
+          return;
+        }
         setError(e instanceof ApiError ? e.message : "채팅을 불러오지 못했어요.");
         setLoaded(true);
       });

@@ -37,7 +37,7 @@ public record AuthLoginResDTO(
                 tokenPair.refreshTokenExpiresAt(),
                 isNewUser,
                 userAccount.isAgreementCompleted(),
-                userAccount.isOnboardingCompleted(),
+                userAccount.isLifeTransitionOnboardingCompleted(),
                 nextStep
         );
     }

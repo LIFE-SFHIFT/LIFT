@@ -18,6 +18,7 @@ import type {
   DocumentFetchResponse,
   LatestChatReport,
   LatestReportRoute,
+  PaymentCompleteRequest,
   PaymentResponse,
   ReportPdfEstimateRequest,
   ReportDetail,
@@ -167,11 +168,14 @@ export const api = {
     return request<LatestReportRoute>("/api/life/reports/latest-route-target");
   },
 
-  completePayment(reportId: number): Promise<PaymentResponse> {
-    if (isDemoSession()) return demoApi.completePayment(reportId);
+  completePayment(
+    reportId: number,
+    payload?: PaymentCompleteRequest,
+  ): Promise<PaymentResponse> {
+    if (isDemoSession()) return demoApi.completePayment(reportId, payload);
     return request<PaymentResponse>(
       `/api/life/reports/${reportId}/payments/mock-complete`,
-      { method: "POST" },
+      { method: "POST", body: payload ? JSON.stringify(payload) : undefined },
     );
   },
 
@@ -179,7 +183,7 @@ export const api = {
     reportId: number,
     payload: TossPaymentConfirmRequest,
   ): Promise<PaymentResponse> {
-    if (isDemoSession()) return demoApi.confirmTossPayment(reportId);
+    if (isDemoSession()) return demoApi.confirmTossPayment(reportId, payload);
     return request<PaymentResponse>(
       `/api/life/reports/${reportId}/payments/toss/confirm`,
       { method: "POST", body: JSON.stringify(payload) },

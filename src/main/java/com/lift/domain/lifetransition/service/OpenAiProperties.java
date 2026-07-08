@@ -17,7 +17,7 @@ public class OpenAiProperties {
 
     private String baseUrl = "https://api.openai.com/v1";
 
-    private String model = "gpt-5.5";
+    private String model = "gpt-5.4-mini";
 
     public boolean isAvailable() {
         return enabled && apiKey != null && !apiKey.isBlank();

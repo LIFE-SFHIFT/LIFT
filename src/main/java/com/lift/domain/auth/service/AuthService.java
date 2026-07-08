@@ -134,7 +134,7 @@ public class AuthService {
             return AuthNextStep.TERMS;
         }
 
-        if (!userAccount.isOnboardingCompleted()) {
+        if (!userAccount.isLifeTransitionOnboardingCompleted()) {
             return AuthNextStep.ONBOARDING;
         }
 

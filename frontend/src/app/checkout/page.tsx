@@ -11,7 +11,7 @@ import {
   priorityLabel,
   priorityTone,
 } from "@/lib/labels";
-import type { ReportPreview } from "@/lib/types";
+import type { ReportPlanType, ReportPreview } from "@/lib/types";
 
 const TOSS_CLIENT_KEY = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY ?? "";
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
@@ -19,17 +19,25 @@ const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 const REPORT_PLANS = [
   {
     id: "basic",
+    backendPlan: "BASIC",
     name: "기본 리포트",
     price: 6900,
     summary: "신청 가능 항목, 우선순위, 필요 서류와 공식 링크를 확인해요.",
   },
   {
     id: "plus",
+    backendPlan: "PLUS",
     name: "확장 리포트",
     price: 13900,
     summary: "기본 리포트에 AI 질문 10회와 PDF 저장용 금액 계산까지 함께 봐요.",
   },
-] as const;
+] as const satisfies readonly {
+  id: string;
+  backendPlan: ReportPlanType;
+  name: string;
+  price: number;
+  summary: string;
+}[];
 
 type ReportPlan = (typeof REPORT_PLANS)[number];
 type PlanId = ReportPlan["id"];
@@ -156,7 +164,10 @@ function CheckoutInner() {
     setProcessing("mock");
     setError(null);
     try {
-      await api.completePayment(reportId);
+      await api.completePayment(reportId, {
+        plan: selectedPlan.backendPlan,
+        amount: selectedPlan.price,
+      });
       router.replace(`/report/${reportId}`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "결제 처리 중 문제가 발생했어요.");

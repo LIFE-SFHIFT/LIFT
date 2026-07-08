@@ -18,7 +18,7 @@ public record UserAgreementResDTO(
                 userAccount.isPrivacyPolicyAgreed(),
                 userAccount.isMarketingAgreed(),
                 userAccount.getAgreementAgreedAt(),
-                AuthNextStep.ONBOARDING
+                userAccount.isLifeTransitionOnboardingCompleted() ? AuthNextStep.HOME : AuthNextStep.TERMS
         );
     }
 }

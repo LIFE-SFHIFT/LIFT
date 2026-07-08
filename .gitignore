@@ -20,7 +20,7 @@ bin/
 
 ### IntelliJ IDEA ###
 .idea
-*.iwsspring.application.name=Bodeum
+*.iws
 *.iml
 *.ipr
 out/
@@ -41,6 +41,7 @@ out/
 .env
 .env.*
 !.env.example
+!frontend/.env.local.example
 
 ### Local assistant/editor state ###
 .claude/

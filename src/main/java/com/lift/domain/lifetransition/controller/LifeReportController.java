@@ -1,6 +1,7 @@
 package com.lift.domain.lifetransition.controller;
 
 import com.lift.domain.lifetransition.dto.request.ReportChatMessageCreateReqDTO;
+import com.lift.domain.lifetransition.dto.request.ReportPaymentCompleteReqDTO;
 import com.lift.domain.lifetransition.dto.request.ReportPdfEstimateReqDTO;
 import com.lift.domain.lifetransition.dto.request.TossPaymentConfirmReqDTO;
 import com.lift.domain.lifetransition.dto.response.DocumentFetchResDTO;
@@ -59,9 +60,10 @@ public class LifeReportController {
     @PostMapping("/{reportId}/payments/mock-complete")
     public ApiResponse<ReportPaymentResDTO> completeMockPayment(
             Authentication authentication,
-            @PathVariable Long reportId
+            @PathVariable Long reportId,
+            @RequestBody(required = false) ReportPaymentCompleteReqDTO request
     ) {
-        return ApiResponse.of(GeneralSuccessCode.OK, lifeReportService.completeMockPayment(authentication, reportId));
+        return ApiResponse.of(GeneralSuccessCode.OK, lifeReportService.completeMockPayment(authentication, reportId, request));
     }
 
     @PostMapping("/{reportId}/payments/toss/confirm")

@@ -310,6 +310,10 @@ public class UserAccount {
         return isChildProfileRegistered() && isInterestRegionRegistered() && isGuardianProfileRegistered();
     }
 
+    public boolean isLifeTransitionOnboardingCompleted() {
+        return isAgreementCompleted();
+    }
+
     public Long getId() {
         return id;
     }

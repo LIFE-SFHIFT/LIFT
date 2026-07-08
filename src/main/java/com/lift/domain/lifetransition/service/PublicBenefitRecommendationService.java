@@ -46,7 +46,7 @@ public class PublicBenefitRecommendationService {
     private final RestClient.Builder restClientBuilder;
     private final OpenAiProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    // 추론 모델(gpt-5.5)은 응답이 수십 초 걸릴 수 있어, 기본 타임아웃으로는 간헐적으로 실패해
+    // 추론 모델(gpt-5.4-mini)은 응답이 수십 초 걸릴 수 있어, 기본 타임아웃으로는 간헐적으로 실패해
     // heuristic 폴백(aiSummary 없음)으로 빠진다. 넉넉한 타임아웃을 명시한다.
     private final ClientHttpRequestFactory requestFactory = createRequestFactory();
 

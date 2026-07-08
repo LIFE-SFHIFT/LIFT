@@ -31,7 +31,7 @@ public class LifeReportChatService {
             Long reportId,
             ReportChatMessageCreateReqDTO request
     ) {
-        LifeReport report = reportAccessManager.getPaidOwnedReport(authentication, reportId);
+        LifeReport report = reportAccessManager.getPlusPaidOwnedReport(authentication, reportId);
 
         if (report.isAiQuestionLimitReached()) {
             throw new ProjectException(LifeTransitionErrorCode.AI_QUESTION_LIMIT_EXCEEDED);
@@ -54,7 +54,7 @@ public class LifeReportChatService {
 
     @Transactional(readOnly = true)
     public ReportChatMessagesResDTO getMessages(Authentication authentication, Long reportId) {
-        LifeReport report = reportAccessManager.getPaidOwnedReport(authentication, reportId);
+        LifeReport report = reportAccessManager.getPlusPaidOwnedReport(authentication, reportId);
         List<ReportChatMessage> messages = reportChatMessageRepository.findByReport_IdOrderByIdAsc(reportId);
         return ReportChatMessagesResDTO.of(report, messages);
     }

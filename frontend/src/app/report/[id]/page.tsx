@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
@@ -478,7 +478,7 @@ function ReportInner({ reportId }: { reportId: number }) {
     }
   }
 
-  async function fetchDocuments() {
+  const fetchDocuments = useCallback(async () => {
     setFetching(true);
     try {
       const res = await api.fetchDocuments(reportId);
@@ -496,7 +496,7 @@ function ReportInner({ reportId }: { reportId: number }) {
     } finally {
       setFetching(false);
     }
-  }
+  }, [reportId]);
 
   useEffect(() => {
     api
@@ -528,7 +528,7 @@ function ReportInner({ reportId }: { reportId: number }) {
     } catch {
       localStorage.removeItem(verifiedStorageKey());
     }
-  }, [reportId]);
+  }, [fetchDocuments, reportId]);
 
   async function handleVerified(name: string) {
     setVerifiedName(name);
@@ -541,6 +541,10 @@ function ReportInner({ reportId }: { reportId: number }) {
   }
 
   function openPdfVersion(monthlyAverageWage: number | null) {
+    if (!report?.pdfAvailable) {
+      setPdfError("PDF 저장은 확장 리포트 결제 후 이용할 수 있어요.");
+      return;
+    }
     setPdfError(null);
     setPdfLoading(monthlyAverageWage == null ? "without-wage" : "with-wage");
     const query =
@@ -796,15 +800,28 @@ function ReportInner({ reportId }: { reportId: number }) {
       )}
 
       <div className="sticky-cta no-print" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {report.aiChatAvailable ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => router.push(`/report/${reportId}/chat`)}
+          >
+            이 로드맵으로 AI에게 질문하기 (남은 {report.aiQuestionRemaining}회)
+          </button>
+        ) : (
+          <button type="button" className="btn" disabled>
+            AI 질문은 확장 리포트에서 이용 가능
+          </button>
+        )}
         <button
           type="button"
-          className="btn"
-          onClick={() => router.push(`/report/${reportId}/chat`)}
+          className="btn secondary"
+          disabled={!report.pdfAvailable}
+          onClick={() => {
+            if (report.pdfAvailable) setShowPdfOptions(true);
+          }}
         >
-          이 로드맵으로 AI에게 질문하기 (남은 {report.aiQuestionRemaining}회)
-        </button>
-        <button type="button" className="btn secondary" onClick={() => setShowPdfOptions(true)}>
-          예상 수령액 리포트 PDF로 저장
+          {report.pdfAvailable ? "예상 수령액 리포트 PDF로 저장" : "PDF 저장은 확장 리포트에서 이용 가능"}
         </button>
       </div>
     </>

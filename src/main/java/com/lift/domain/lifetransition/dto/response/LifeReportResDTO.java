@@ -2,6 +2,7 @@ package com.lift.domain.lifetransition.dto.response;
 
 import com.lift.domain.lifetransition.enumtype.PaymentStatus;
 import com.lift.domain.lifetransition.enumtype.ProcedureType;
+import com.lift.domain.lifetransition.enumtype.ReportPlanType;
 import com.lift.domain.lifetransition.model.LifeReport;
 import com.lift.domain.lifetransition.service.BenefitEstimationService.ReportEstimation;
 import java.time.LocalDateTime;
@@ -18,6 +19,10 @@ public record LifeReportResDTO(
         String summaryMessage,
         int totalPriorityScore,
         PaymentStatus paymentStatus,
+        ReportPlanType paymentPlan,
+        Integer paymentAmount,
+        boolean aiChatAvailable,
+        boolean pdfAvailable,
         int aiQuestionLimit,
         int aiQuestionUsedCount,
         int aiQuestionRemaining,
@@ -48,6 +53,10 @@ public record LifeReportResDTO(
                 report.getSummaryMessage(),
                 report.getTotalPriorityScore(),
                 report.getPaymentStatus(),
+                report.getResolvedPaymentPlan(),
+                report.getResolvedPaymentAmount(),
+                report.canUseAiChat(),
+                report.canUsePdfEstimate(),
                 report.getAiQuestionLimit(),
                 report.getAiQuestionUsedCount(),
                 report.getAiQuestionRemaining(),

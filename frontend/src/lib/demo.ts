@@ -17,13 +17,16 @@ import type {
   EligibilityLevel,
   LatestChatReport,
   LatestReportRoute,
+  PaymentCompleteRequest,
   PaymentResponse,
   PublicBenefit,
   ReportDetail,
   ReportItem,
   ReportPdfEstimateRequest,
   ReportPreview,
+  ReportPlanType,
   ResignationReason,
+  TossPaymentConfirmRequest,
   UserAgreementRequest,
   UserAgreementResponse,
   UserProfile,
@@ -36,6 +39,18 @@ const ASSESSMENT_KEY = "lift.demo.assessment";
 const CHAT_KEY = "lift.demo.chat";
 const COMMUNITY_KEY = "lift.demo.community";
 const ASSESSMENT_INPUTS_KEY = "lift.demo.assessmentInputs";
+
+function planPrice(plan: ReportPlanType): number {
+  return plan === "PLUS" ? 13_900 : 6_900;
+}
+
+function planFromAmount(amount?: number | null): ReportPlanType {
+  return amount === 6_900 ? "BASIC" : "PLUS";
+}
+
+function planAiLimit(plan: ReportPlanType): number {
+  return plan === "PLUS" ? 10 : 0;
+}
 
 /**
  * 실제 gov24_benefit_cache에서 나이 조건이 명확히 검증된 항목과 동일한 값.
@@ -304,12 +319,39 @@ function saveProfile(next: UserProfile): UserProfile {
   return writeJson(PROFILE_KEY, next);
 }
 
+function normalizeReport(report: ReportDetail): ReportDetail {
+  const legacy = report as Partial<ReportDetail>;
+  if (report.paymentStatus === "PAID" && legacy.paymentPlan == null) {
+    return {
+      ...report,
+      paymentPlan: "PLUS",
+      paymentAmount: 13_900,
+      aiChatAvailable: true,
+      pdfAvailable: true,
+      aiQuestionLimit: report.aiQuestionLimit || 10,
+      aiQuestionRemaining: report.aiQuestionRemaining || Math.max(0, 10 - report.aiQuestionUsedCount),
+    };
+  }
+
+  return {
+    ...report,
+    paymentPlan: legacy.paymentPlan ?? null,
+    paymentAmount: legacy.paymentAmount ?? null,
+    aiChatAvailable: Boolean(legacy.aiChatAvailable),
+    pdfAvailable: Boolean(legacy.pdfAvailable),
+    aiQuestionLimit: legacy.aiQuestionLimit ?? 0,
+    aiQuestionUsedCount: legacy.aiQuestionUsedCount ?? 0,
+    aiQuestionRemaining: legacy.aiQuestionRemaining ?? 0,
+  };
+}
+
 function latestReport(): ReportDetail | null {
-  return readJson<ReportDetail | null>(REPORT_KEY, null);
+  const report = readJson<ReportDetail | null>(REPORT_KEY, null);
+  return report ? normalizeReport(report) : null;
 }
 
 function saveReport(report: ReportDetail): ReportDetail {
-  return writeJson(REPORT_KEY, report);
+  return writeJson(REPORT_KEY, normalizeReport(report));
 }
 
 // PDF 저장 시 월급으로 예상액을 재계산하려면 원본 진단 입력이 필요하므로 함께 보관한다.
@@ -646,9 +688,13 @@ function reportFromAssessment(
     expectedAmountRangeLabel: rangeLabel(receiveMin, receiveMax),
     totalPriorityScore: 8,
     paymentStatus: "UNPAID",
-    aiQuestionLimit: 10,
+    paymentPlan: null,
+    paymentAmount: null,
+    aiChatAvailable: false,
+    pdfAvailable: false,
+    aiQuestionLimit: 0,
     aiQuestionUsedCount: 0,
-    aiQuestionRemaining: 10,
+    aiQuestionRemaining: 0,
     createdAt,
     benefitSummary: {
       totalReceiveAmount: receiveTotal,
@@ -731,7 +777,7 @@ export const demoApi = {
       privacyPolicyAgreed: true,
       marketingAgreed: false,
       agreedAt: now(),
-      nextStep: "ONBOARDING",
+      nextStep: "HOME",
     });
   },
 
@@ -789,7 +835,17 @@ export const demoApi = {
   },
 
   analyze(_assessmentId: number): Promise<ReportPreview> {
-    const report = saveReport({ ...requireReport(), paymentStatus: "UNPAID" });
+    const report = saveReport({
+      ...requireReport(),
+      paymentStatus: "UNPAID",
+      paymentPlan: null,
+      paymentAmount: null,
+      aiChatAvailable: false,
+      pdfAvailable: false,
+      aiQuestionLimit: 0,
+      aiQuestionUsedCount: 0,
+      aiQuestionRemaining: 0,
+    });
     return Promise.resolve(previewFrom(report));
   },
 
@@ -809,22 +865,48 @@ export const demoApi = {
   getLatestChatReport(): Promise<LatestChatReport> {
     const report = latestReport();
     return Promise.resolve({
-      available: report?.paymentStatus === "PAID",
-      reportId: report?.paymentStatus === "PAID" ? report.reportId : null,
+      available: Boolean(report?.aiChatAvailable),
+      reportId: report?.aiChatAvailable ? report.reportId : null,
     });
   },
 
-  completePayment(_reportId: number): Promise<PaymentResponse> {
-    const report = saveReport({ ...requireReport(), paymentStatus: "PAID" });
+  completePayment(
+    _reportId: number,
+    payload?: PaymentCompleteRequest,
+  ): Promise<PaymentResponse> {
+    const plan = payload?.plan ?? planFromAmount(payload?.amount);
+    const amount = payload?.amount ?? planPrice(plan);
+    const aiLimit = planAiLimit(plan);
+    const report = saveReport({
+      ...requireReport(),
+      paymentStatus: "PAID",
+      paymentPlan: plan,
+      paymentAmount: amount,
+      aiChatAvailable: plan === "PLUS",
+      pdfAvailable: plan === "PLUS",
+      aiQuestionLimit: aiLimit,
+      aiQuestionUsedCount: 0,
+      aiQuestionRemaining: aiLimit,
+    });
     return Promise.resolve({
       reportId: report.reportId,
       paymentStatus: "PAID",
       assessmentStatus: "PAID",
+      paymentPlan: plan,
+      paymentAmount: amount,
+      aiChatAvailable: plan === "PLUS",
+      pdfAvailable: plan === "PLUS",
     });
   },
 
-  confirmTossPayment(reportId: number): Promise<PaymentResponse> {
-    return this.completePayment(reportId);
+  confirmTossPayment(
+    reportId: number,
+    payload?: TossPaymentConfirmRequest,
+  ): Promise<PaymentResponse> {
+    return this.completePayment(reportId, {
+      plan: planFromAmount(payload?.amount),
+      amount: payload?.amount ?? 13_900,
+    });
   },
 
   getReport(_reportId: number): Promise<ReportDetail> {
@@ -833,6 +915,9 @@ export const demoApi = {
 
   getPdfReport(_reportId: number, payload: ReportPdfEstimateRequest): Promise<ReportDetail> {
     const base = requireReport();
+    if (!base.pdfAvailable) {
+      throw new Error("확장 리포트 결제 후 이용할 수 있습니다.");
+    }
     const assessment = savedAssessment();
     // 진단 입력이 없으면(구버전 리포트 등) 저장된 리포트 그대로 반환한다.
     if (!assessment) {
@@ -847,6 +932,10 @@ export const demoApi = {
       reportId: base.reportId,
       assessmentId: base.assessmentId,
       paymentStatus: base.paymentStatus,
+      paymentPlan: base.paymentPlan,
+      paymentAmount: base.paymentAmount,
+      aiChatAvailable: base.aiChatAvailable,
+      pdfAvailable: base.pdfAvailable,
       aiQuestionLimit: base.aiQuestionLimit,
       aiQuestionUsedCount: base.aiQuestionUsedCount,
       aiQuestionRemaining: base.aiQuestionRemaining,
@@ -879,12 +968,18 @@ export const demoApi = {
   },
 
   getChatMessages(_reportId: number): Promise<ChatMessagesResponse> {
+    const report = requireReport();
+    if (!report.aiChatAvailable) {
+      throw new Error("확장 리포트 결제 후 이용할 수 있습니다.");
+    }
     const messages = readJson<ChatMessage[]>(CHAT_KEY, []);
+    const limit = report.aiQuestionLimit;
+    const used = Math.floor(messages.length / 2);
     return Promise.resolve({
       messages,
-      aiQuestionLimit: 10,
-      aiQuestionUsedCount: Math.floor(messages.length / 2),
-      aiQuestionRemaining: Math.max(0, 10 - Math.floor(messages.length / 2)),
+      aiQuestionLimit: limit,
+      aiQuestionUsedCount: used,
+      aiQuestionRemaining: Math.max(0, limit - used),
     });
   },
 
@@ -894,8 +989,15 @@ export const demoApi = {
     _reportId: number,
     content: string,
   ): Promise<ChatMessageCreateResponse> {
+    const report = requireReport();
+    if (!report.aiChatAvailable) {
+      throw new Error("확장 리포트 결제 후 이용할 수 있습니다.");
+    }
     const messages = readJson<ChatMessage[]>(CHAT_KEY, []);
     const used = Math.floor(messages.length / 2) + 1;
+    if (used > report.aiQuestionLimit) {
+      throw new Error("AI 질문 가능 횟수를 모두 사용했습니다.");
+    }
     const userMessage: ChatMessage = {
       messageId: Date.now(),
       senderType: "USER",
@@ -933,9 +1035,9 @@ export const demoApi = {
     return {
       userMessage,
       aiMessage,
-      aiQuestionLimit: 10,
+      aiQuestionLimit: report.aiQuestionLimit,
       aiQuestionUsedCount: used,
-      aiQuestionRemaining: Math.max(0, 10 - used),
+      aiQuestionRemaining: Math.max(0, report.aiQuestionLimit - used),
     };
   },
 

@@ -28,6 +28,7 @@ export type AssetRange = "UNKNOWN" | "UNDER_240M" | "OVER_240M";
 export type HousingType = "UNKNOWN" | "MONTHLY_RENT" | "JEONSE" | "OWNED" | "FAMILY";
 export type AssessmentStatus = "DRAFT" | "ANALYZED" | "PAID";
 export type PaymentStatus = "UNPAID" | "PAID";
+export type ReportPlanType = "BASIC" | "PLUS";
 export type EligibilityLevel = "HIGH" | "NEEDS_CHECK" | "LOW";
 export type PriorityLevel = "HIGH" | "MEDIUM" | "LOW";
 export type PublicBenefitFitLevel = "HIGH" | "NEEDS_CHECK" | "LOW";
@@ -271,6 +272,10 @@ export interface ReportDetail {
   expectedAmountRangeLabel?: string | null;
   totalPriorityScore: number;
   paymentStatus: PaymentStatus;
+  paymentPlan: ReportPlanType | null;
+  paymentAmount: number | null;
+  aiChatAvailable: boolean;
+  pdfAvailable: boolean;
   aiQuestionLimit: number;
   aiQuestionUsedCount: number;
   aiQuestionRemaining: number;
@@ -291,6 +296,15 @@ export interface PaymentResponse {
   reportId: number;
   paymentStatus: PaymentStatus;
   assessmentStatus: AssessmentStatus;
+  paymentPlan: ReportPlanType | null;
+  paymentAmount: number | null;
+  aiChatAvailable: boolean;
+  pdfAvailable: boolean;
+}
+
+export interface PaymentCompleteRequest {
+  plan: ReportPlanType;
+  amount: number;
 }
 
 export interface TossPaymentConfirmRequest {

@@ -12,7 +12,8 @@ import org.springframework.stereotype.Component;
 public class Gov24PublicServiceProperties {
 
     /**
-     * 공공데이터포털 활용신청 후 받은 서비스키가 있을 때만 조회한다.
+     * true면 DB에 적재된 gov24_benefit_cache 후보를 리포트 매칭에 사용한다.
+     * serviceKey는 별도 적재 작업이 실시간 API를 호출할 때만 필요하다.
      */
     private boolean enabled = false;
 
@@ -29,6 +30,6 @@ public class Gov24PublicServiceProperties {
     private int maxResults = 6;
 
     public boolean isAvailable() {
-        return enabled && serviceKey != null && !serviceKey.isBlank();
+        return enabled;
     }
 }
