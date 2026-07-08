@@ -1,12 +1,15 @@
 package com.lift.domain.lifetransition.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -25,8 +28,12 @@ import org.springframework.web.client.RestClientException;
 @RequiredArgsConstructor
 public class OpenAiResponsesClient {
 
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
+
     private final RestClient.Builder restClientBuilder;
     private final OpenAiProperties properties;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** OpenAI 연동이 켜져 있고 API 키가 준비됐는지 여부. */
     public boolean isEnabled() {
@@ -49,19 +56,34 @@ public class OpenAiResponsesClient {
             payload.put("model", properties.getModel());
             payload.put("input", input);
 
-            Map<String, Object> response = restClientBuilder.build()
+            // Spring Boot 4 + Jackson2/3 혼재 환경에서는 응답 미디어 타입이 octet-stream으로
+            // 잡혀 메시지 컨버터 선택이 실패한다(Map/String 모두). 그래서 exchange로 원시 응답
+            // 스트림을 직접 읽어, 컨버터에 의존하지 않고 우리 ObjectMapper로 파싱한다.
+            String rawBody = restClientBuilder.build()
                     .post()
                     .uri(properties.getBaseUrl().replaceAll("/+$", "") + "/responses")
                     .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
                     .header("Authorization", "Bearer " + properties.getApiKey())
                     .body(payload)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<>() {
+                    .exchange((request, response) -> {
+                        String text = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
+                        if (response.getStatusCode().isError()) {
+                            log.warn("OpenAI Responses 오류 응답 {}: {}", response.getStatusCode(),
+                                    text.length() > 500 ? text.substring(0, 500) : text);
+                            return null;
+                        }
+                        return text;
                     });
 
+            if (!StringUtils.hasText(rawBody)) {
+                return Optional.empty();
+            }
+
+            Map<String, Object> response = objectMapper.readValue(rawBody, MAP_TYPE);
             String answer = extractText(response);
             return StringUtils.hasText(answer) ? Optional.of(answer.strip()) : Optional.empty();
-        } catch (RestClientException | IllegalArgumentException e) {
+        } catch (RestClientException | IllegalArgumentException | IOException e) {
             log.warn("OpenAI Responses 호출 실패: {}", e.getMessage());
             return Optional.empty();
         }

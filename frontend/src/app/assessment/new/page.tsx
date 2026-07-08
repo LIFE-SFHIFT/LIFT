@@ -108,6 +108,10 @@ function AssessmentInner() {
       setError("필수 항목을 모두 선택해 주세요.");
       return;
     }
+    if (!regionSido || !regionSigungu) {
+      setError("거주 지역(시/도와 시/군/구)을 모두 선택해 주세요.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -159,7 +163,9 @@ function AssessmentInner() {
     Boolean(nextJobStatus) &&
     insuranceMonths !== null &&
     Boolean(incomeStatus) &&
-    Boolean(age);
+    Boolean(age) &&
+    Boolean(regionSido) &&
+    Boolean(regionSigungu);
 
   return (
     <form onSubmit={handleSubmit}>
@@ -230,48 +236,57 @@ function AssessmentInner() {
           <span className="wage-badge">📌 리포트 정확도 높이기</span>
           <p className="wage-help">
             나이는 실업급여 기간·퇴직금 판단은 물론, 나이 조건이 있는 공공서비스 혜택
-            매칭을 확인하기 위해 필수로 입력해 주세요. 근속연수와 월급은 선택이며, 월급은
-            민감한 정보라 PDF 저장 단계에서만 따로 입력받습니다.
+            매칭의 핵심 기준이라 필수로 입력해 주세요. 월급은 민감한 정보라 PDF 저장
+            단계에서만 따로 입력받습니다.
           </p>
         </div>
 
-        <div className="wage-row">
-          <div className="form-block">
-            <label className="form-label">
-              나이 (만) <span className="wage-badge">필수</span>
-            </label>
-            <div className="won-input">
-              <input
-                className="text-input"
-                inputMode="numeric"
-                placeholder="예) 35"
-                value={age}
-                onChange={(e) => setAge(e.target.value.replace(/[^\d]/g, "").slice(0, 3))}
-              />
-              <span className="won-suffix">세</span>
-            </div>
-          </div>
-          <div className="form-block">
-            <label className="form-label">근속연수 (선택)</label>
-            <div className="won-input">
-              <input
-                className="text-input"
-                inputMode="numeric"
-                placeholder="예) 5"
-                value={tenureYears}
-                onChange={(e) =>
-                  setTenureYears(e.target.value.replace(/[^\d]/g, "").slice(0, 2))
-                }
-              />
-              <span className="won-suffix">년</span>
-            </div>
+        <div className="form-block">
+          <label className="form-label">
+            나이 (만) <span className="wage-badge">필수</span>
+          </label>
+          <div className="won-input">
+            <input
+              className="text-input"
+              inputMode="numeric"
+              placeholder="예) 35"
+              value={age}
+              onChange={(e) => setAge(e.target.value.replace(/[^\d]/g, "").slice(0, 3))}
+            />
+            <span className="won-suffix">세</span>
           </div>
         </div>
       </div>
 
       <div className="form-block">
-        <label className="form-label">거주 지역 (선택)</label>
-        <p className="form-help">지역 맞춤 안내를 위해 사용돼요.</p>
+        <label className="form-label">
+          근속연수 <span className="label-hint">· 선택</span>
+        </label>
+        <p className="form-help">
+          이전 직장에서 일한 총 햇수예요. 입력하면 퇴직금·장기근속 관련 판단이 더
+          정확해져요.
+        </p>
+        <div className="won-input">
+          <input
+            className="text-input"
+            inputMode="numeric"
+            placeholder="예) 5"
+            value={tenureYears}
+            onChange={(e) =>
+              setTenureYears(e.target.value.replace(/[^\d]/g, "").slice(0, 2))
+            }
+          />
+          <span className="won-suffix">년</span>
+        </div>
+      </div>
+
+      <div className="form-block">
+        <label className="form-label">
+          거주 지역 <span className="wage-badge">필수</span>
+        </label>
+        <p className="form-help">
+          시/도를 고르면 해당 시·군·구가 나타나요. 지역 맞춤 혜택 안내에 사용돼요.
+        </p>
         <RegionField
           sido={regionSido}
           sigungu={regionSigungu}

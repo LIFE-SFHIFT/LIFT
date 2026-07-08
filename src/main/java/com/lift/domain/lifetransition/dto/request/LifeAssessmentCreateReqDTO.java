@@ -10,6 +10,7 @@ import com.lift.domain.lifetransition.enumtype.NextJobStatus;
 import com.lift.domain.lifetransition.enumtype.ResignationReason;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
@@ -36,9 +37,11 @@ public record LifeAssessmentCreateReqDTO(
 
         CurrentIncomeStatus currentIncomeStatus,
 
+        @NotBlank(message = "시/도는 필수입니다.")
         @Size(max = 50, message = "시/도는 최대 50자까지 입력 가능합니다.")
         String regionSido,
 
+        @NotBlank(message = "시/군/구는 필수입니다.")
         @Size(max = 50, message = "시/군/구는 최대 50자까지 입력 가능합니다.")
         String regionSigungu,
 
