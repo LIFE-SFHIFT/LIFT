@@ -2015,6 +2015,18 @@ p.page-sub {
   color: #fff;
 }
 
+/* 개발 중이라 선택 불가한 분야 칩 */
+.chip-filter.locked {
+  color: var(--text-sub);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.chip-filter.locked:hover {
+  background: transparent;
+  color: var(--text-sub);
+}
+
 .segment {
   display: inline-flex;
   padding: 3px;

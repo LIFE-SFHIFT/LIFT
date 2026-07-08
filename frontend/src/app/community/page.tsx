@@ -21,14 +21,15 @@ const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
   { value: "ALL", label: "전체" },
   { value: "JOB_CHANGE", label: "이직" },
   { value: "RETIREMENT", label: "퇴직" },
-  { value: "UNEMPLOYMENT", label: "실직" },
 ];
 
-const POST_CATEGORIES: CommunityCategory[] = [
-  "JOB_CHANGE",
-  "RETIREMENT",
-  "UNEMPLOYMENT",
+// 아직 개발 중이라 선택할 수 없는(비활성) 분야
+const LOCKED_CATEGORY_TABS: { key: string; label: string }[] = [
+  { key: "marriage", label: "결혼" },
+  { key: "parental-leave", label: "육아휴직" },
 ];
+
+const POST_CATEGORIES: CommunityCategory[] = ["JOB_CHANGE", "RETIREMENT"];
 
 const MODE_LABEL: Record<CommunityMode, string> = {
   latest: "최신글",
@@ -250,6 +251,18 @@ function CommunityInner() {
               onClick={() => setCategory(tab.value)}
             >
               {tab.label}
+            </button>
+          ))}
+          {LOCKED_CATEGORY_TABS.map((tab) => (
+            <button
+              type="button"
+              key={tab.key}
+              className="chip-filter locked"
+              disabled
+              aria-disabled="true"
+              title="아직 준비 중인 분야예요"
+            >
+              {tab.label} 🔒
             </button>
           ))}
         </div>
