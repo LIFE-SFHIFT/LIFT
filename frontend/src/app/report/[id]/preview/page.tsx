@@ -41,17 +41,29 @@ function PreviewInner({ reportId }: { reportId: number }) {
       <div className="summary-hero">
         <h2>{preview.summaryTitle}</h2>
         <p>{preview.summaryMessage}</p>
-        {preview.expectedAmountRangeLabel && (
-          <div className="hero-benefit">
-            <span className="hero-benefit-label">💰 예상 환급·지원 금액</span>
-            <strong className="hero-benefit-amount">
-              {preview.expectedAmountRangeLabel}
-            </strong>
-            <span className="hero-benefit-note">
-              입력한 상황 기준 추정치 · 항목별 금액은 상세 리포트에서 확인
-            </span>
-          </div>
-        )}
+        <div className="hero-benefit">
+          <span className="hero-benefit-label">💰 한 번에 받을 수 있는 예상 금액</span>
+          {preview.expectedAmountRangeLabel ? (
+            <>
+              <strong className="hero-benefit-amount">
+                {preview.expectedAmountRangeLabel}
+              </strong>
+              <span className="hero-benefit-note">
+                실업급여·퇴직금 등 일시 수령액 추정치 · 항목별 금액은 상세 리포트에서 확인
+              </span>
+            </>
+          ) : (
+            <>
+              <strong className="hero-benefit-amount hero-benefit-amount-sm">
+                결제 후 항목별 예상 금액 확인
+              </strong>
+              <span className="hero-benefit-note">
+                입력한 정보로는 일시 수령액 범위를 확정하기 어려워요. 상세 리포트에서 항목별
+                예상 금액과 절감액을 확인하세요.
+              </span>
+            </>
+          )}
+        </div>
         <div className="score-pill">총 {preview.totalItemCount}개 항목 발견</div>
       </div>
 

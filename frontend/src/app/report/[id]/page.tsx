@@ -418,7 +418,7 @@ function ReportInner({ reportId }: { reportId: number }) {
       (summary.totalReceiveAmount > 0 || summary.totalMonthlySaving > 0) ? (
         <div className="benefit-hero">
           <span className="bh-kicker">
-            💰 이 로드맵으로 {summary.totalReceiveAmount > 0 ? "받을 수 있는 돈" : "아낄 수 있는 돈"}
+            💰 이 로드맵으로 {summary.totalReceiveAmount > 0 ? "한 번에 받을 수 있는 돈" : "매달 아낄 수 있는 돈"}
           </span>
           {summary.totalReceiveAmount > 0 ? (
             <>
@@ -426,8 +426,8 @@ function ReportInner({ reportId }: { reportId: number }) {
                 약 {formatWon(summary.totalReceiveAmount)}
               </div>
               <div className="bh-sub">
-                지금 신청 가능한 {summary.receiveItemCount}가지 혜택의 예상 수령액을 합친
-                금액이에요. 아래에서 항목별 금액을 확인하세요.
+                지금 신청 가능한 {summary.receiveItemCount}가지 혜택(실업급여·퇴직금 등)의
+                예상 수령액을 <b>한 번에 합친 금액</b>이에요. 아래에서 항목별 금액을 확인하세요.
               </div>
             </>
           ) : (

@@ -277,20 +277,20 @@ export function ReportPdfDocument({ report }: { report: ReportDetail }) {
                 const money = moneyInsight(item);
                 return (
                   <tr key={item.itemId}>
-                    <td>
+                    <td data-label="혜택">
                       <div className="pdf-td-name">{item.procedureName}</div>
                       <div className="pdf-td-detail">{item.reason}</div>
                     </td>
-                    <td>
+                    <td data-label="신청 판단">
                       <span className={`pdf-mini-pill eligibility-${item.eligibilityLevel.toLowerCase()}`}>
                         {eligibilityLabel[item.eligibilityLevel]}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="예상 금액 / 산식">
                       <div className={`pdf-amount ${money.tone}`}>{money.label}</div>
                       <div className="pdf-td-detail">{money.note}</div>
                     </td>
-                    <td>
+                    <td data-label="바로 할 일">
                       <div className="pdf-action-text">
                         {BENEFIT_GUIDE[item.procedureType].action}
                       </div>

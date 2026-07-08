@@ -47,7 +47,11 @@ public class SecurityConfig {
             "/api/auth/logout",
             "/api/terms/**",
             // 데모(비로그인) 체험용 퇴직 챗봇. 리포트는 요청 본문으로 받는다.
-            "/api/ai/report-chat"
+            "/api/ai/report-chat",
+            // 커뮤니티는 데모 로그인도 공유 게시판에 글을 남길 수 있도록 허용한다.
+            // 로그인 사용자는 필터가 세팅한 Authentication으로 본인 계정에 귀속되고,
+            // 비로그인(데모) 요청은 서비스에서 공유 데모 계정으로 저장된다.
+            "/api/community/**"
     };
 
     @Bean

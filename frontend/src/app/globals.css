@@ -461,6 +461,10 @@ p.page-sub {
   margin: 14px 0 12px;
 }
 
+.checkout-plan-grid .card + .card {
+  margin-top: 0;
+}
+
 .checkout-plan {
   width: 100%;
   height: 100%;
@@ -683,6 +687,10 @@ p.page-sub {
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.35;
+}
+
+.hero-benefit-amount.hero-benefit-amount-sm {
+  font-size: 17px;
 }
 
 .hero-benefit-note {
@@ -5100,6 +5108,258 @@ p.page-sub {
   margin-top: 7px !important;
   font-weight: 900;
   color: #344054;
+}
+
+/* ===== PDF 미리보기: 모바일 웹앱 반응형 =====
+   A4 고정 레이아웃(다열 그리드·표)은 좁은 화면에서 글자가 잘리고 한 단어씩 줄바꿈돼
+   깨져 보인다. 화면 미리보기(.pdf-preview-shell)에서만 단일열/스택으로 재배치하고
+   글자를 키운다. 실제 인쇄(@media print)와 데스크톱 미리보기는 A4 레이아웃을 유지한다. */
+@media screen and (max-width: 640px) {
+  .pdf-preview-page {
+    padding: 10px 10px 40px;
+    background: #eef2f8;
+  }
+
+  .pdf-preview-toolbar {
+    top: 8px;
+    grid-template-columns: 0.8fr 1.2fr;
+  }
+
+  .pdf-preview-shell .pdf-page {
+    min-height: auto;
+    padding: 18px 15px 22px;
+    border-radius: 16px;
+    font-size: 13px;
+  }
+
+  /* 표지 */
+  .pdf-preview-shell .pdf-cover {
+    padding: 16px 15px 18px;
+    border-radius: 14px;
+  }
+  .pdf-preview-shell .pdf-cover-top {
+    gap: 12px;
+  }
+  .pdf-preview-shell .pdf-brand {
+    font-size: 24px;
+  }
+  .pdf-preview-shell .pdf-head-meta {
+    font-size: 11.5px;
+  }
+  .pdf-preview-shell .pdf-cover-body {
+    margin-top: 18px;
+  }
+  .pdf-preview-shell .pdf-kicker {
+    font-size: 11px;
+    white-space: normal;
+  }
+  .pdf-preview-shell .pdf-title {
+    font-size: 23px;
+    line-height: 1.3;
+  }
+  .pdf-preview-shell .pdf-summary-msg {
+    font-size: 13px;
+  }
+
+  /* 핵심 요약 지표: 3열 → 1열 */
+  .pdf-preview-shell .pdf-metrics {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .pdf-preview-shell .pdf-metric {
+    min-height: 0;
+    padding: 14px 15px;
+    display: flex;
+    flex-direction: column;
+  }
+  .pdf-preview-shell .pdf-metric span {
+    font-size: 12px;
+  }
+  .pdf-preview-shell .pdf-metric strong {
+    font-size: 22px;
+    margin: 6px 0 4px;
+  }
+  .pdf-preview-shell .pdf-metric.primary strong {
+    font-size: 26px;
+  }
+  .pdf-preview-shell .pdf-metric small {
+    font-size: 12px;
+  }
+
+  /* 섹션 제목 */
+  .pdf-preview-shell .pdf-section-block {
+    margin-top: 22px;
+  }
+  .pdf-preview-shell .pdf-section-head span {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+  }
+  .pdf-preview-shell .pdf-section-head h2 {
+    font-size: 18px;
+  }
+  .pdf-preview-shell .pdf-section-head.compact h2 {
+    font-size: 16px;
+  }
+
+  /* LIFT TOP: 3열 → 1열 */
+  .pdf-preview-shell .pdf-top-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .pdf-preview-shell .pdf-top-card {
+    padding: 14px;
+  }
+  .pdf-preview-shell .pdf-card-title {
+    font-size: 15px;
+  }
+  .pdf-preview-shell .pdf-top-card p {
+    font-size: 12.5px;
+    margin: 8px 0;
+  }
+  .pdf-preview-shell .pdf-chip,
+  .pdf-preview-shell .pdf-mini-pill {
+    font-size: 11px;
+    padding: 4px 9px;
+  }
+  .pdf-preview-shell .pdf-deadline {
+    font-size: 12px;
+  }
+  .pdf-preview-shell .pdf-money-line b {
+    font-size: 13.5px;
+  }
+  .pdf-preview-shell .pdf-money-line span {
+    font-size: 10.5px;
+    padding: 4px 8px;
+  }
+
+  /* 혜택별 금액 진단 표: 4열 테이블 → 행 단위 스택 카드 */
+  .pdf-preview-shell .pdf-money-table {
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+  .pdf-preview-shell .pdf-money-table,
+  .pdf-preview-shell .pdf-money-table tbody,
+  .pdf-preview-shell .pdf-money-table tr,
+  .pdf-preview-shell .pdf-money-table td {
+    display: block;
+    width: auto;
+  }
+  .pdf-preview-shell .pdf-money-table thead {
+    display: none;
+  }
+  .pdf-preview-shell .pdf-money-table tr {
+    border: 1px solid #e0e7f2;
+    border-radius: 12px;
+    background: #fff;
+    padding: 4px 2px;
+    margin-bottom: 10px;
+  }
+  .pdf-preview-shell .pdf-money-table td {
+    border-bottom: 1px solid #f0f3f8;
+    padding: 10px 14px;
+  }
+  .pdf-preview-shell .pdf-money-table tr td:last-child {
+    border-bottom: none;
+  }
+  .pdf-preview-shell .pdf-money-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: #98a2b3;
+  }
+  /* 첫 칸(혜택명)은 라벨 없이 제목을 그대로 강조 */
+  .pdf-preview-shell .pdf-money-table td[data-label="혜택"]::before {
+    display: none;
+  }
+  .pdf-preview-shell .pdf-td-name {
+    font-size: 14px;
+  }
+  .pdf-preview-shell .pdf-td-detail {
+    font-size: 12px;
+  }
+  .pdf-preview-shell .pdf-amount {
+    font-size: 14.5px;
+  }
+  .pdf-preview-shell .pdf-action-text {
+    font-size: 12.5px;
+  }
+
+  /* 공공데이터 추가 혜택: 2열 → 1열 */
+  .pdf-preview-shell .pdf-public-benefits {
+    padding: 14px;
+  }
+  .pdf-preview-shell .pdf-public-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .pdf-preview-shell .pdf-public-title {
+    font-size: 14px;
+  }
+  .pdf-preview-shell .pdf-public-card p,
+  .pdf-preview-shell .pdf-public-card small {
+    font-size: 12px;
+  }
+  .pdf-preview-shell .pdf-public-meta span {
+    font-size: 10.5px;
+  }
+
+  /* 로드맵 + 준비서류: 2열 → 1열 */
+  .pdf-preview-shell .pdf-two-col {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .pdf-preview-shell .pdf-panel {
+    padding: 14px;
+  }
+  .pdf-preview-shell .pdf-rm-title {
+    font-size: 13.5px;
+  }
+  .pdf-preview-shell .pdf-rm-tag {
+    font-size: 11px;
+  }
+  .pdf-preview-shell .pdf-rm-deadline {
+    font-size: 12px;
+  }
+  .pdf-preview-shell .pdf-doc-list b {
+    font-size: 13px;
+  }
+  .pdf-preview-shell .pdf-doc-list small {
+    font-size: 11.5px;
+  }
+  .pdf-preview-shell .pdf-check-box {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* 금액 계산 기준: 4열 → 2열 */
+  .pdf-preview-shell .pdf-formula-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .pdf-preview-shell .pdf-formula-grid b {
+    font-size: 12px;
+  }
+  .pdf-preview-shell .pdf-formula-grid span {
+    font-size: 11px;
+  }
+
+  /* 하단 */
+  .pdf-preview-shell .pdf-foot {
+    font-size: 12px;
+  }
+}
+
+/* 아주 좁은 화면(≤380px): 계산 기준도 1열로 */
+@media screen and (max-width: 380px) {
+  .pdf-preview-shell .pdf-formula-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ===== 더미 서류 미리보기 ===== */

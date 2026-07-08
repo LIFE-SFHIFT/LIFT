@@ -45,6 +45,33 @@ public class UserAccountStore {
         }
     }
 
+    // 데모(비로그인) 사용자가 공유하는 단일 커뮤니티 계정 식별자.
+    // 게시판은 완전 익명이라 이 계정 정보는 화면에 드러나지 않는다.
+    private static final String DEMO_PROVIDER_USER_ID = "__lift_demo_shared__";
+
+    /**
+     * 데모 로그인 사용자가 공유하는 커뮤니티 계정을 조회하거나 만든다.
+     * 소셜 사용자 생성과 동일하게 unique 제약 위반을 재조회로 복구한다.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public UserAccount getOrCreateDemoUser() {
+        Optional<UserAccount> existingUser =
+                userAccountRepository.findByProviderAndProviderUserId(SocialProvider.KAKAO, DEMO_PROVIDER_USER_ID);
+        if (existingUser.isPresent()) {
+            return requireActive(existingUser.get());
+        }
+
+        try {
+            UserAccount demoUser = UserAccount.createSocialUser(
+                    SocialProvider.KAKAO, DEMO_PROVIDER_USER_ID, null, "데모");
+            return userAccountRepository.saveAndFlush(demoUser);
+        } catch (DataIntegrityViolationException e) {
+            return userAccountRepository.findByProviderAndProviderUserId(SocialProvider.KAKAO, DEMO_PROVIDER_USER_ID)
+                    .map(this::requireActive)
+                    .orElseThrow(() -> e);
+        }
+    }
+
     @Transactional(readOnly = true)
     public UserAccount getUserById(Long userId) {
         return findActiveUser(userId)

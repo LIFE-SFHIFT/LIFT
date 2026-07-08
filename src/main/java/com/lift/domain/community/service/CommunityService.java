@@ -14,9 +14,11 @@ import com.lift.domain.community.repository.CommunityPostLikeRepository;
 import com.lift.domain.community.repository.CommunityPostRepository;
 import com.lift.domain.lifetransition.enumtype.LifeEventType;
 import com.lift.domain.user.model.UserAccount;
+import com.lift.domain.user.service.UserAccountStore;
 import com.lift.domain.user.service.UserService;
 import com.lift.global.apiPayload.code.GeneralErrorCode;
 import com.lift.global.apiPayload.exception.ProjectException;
+import com.lift.global.auth.AuthUserPrincipal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -36,6 +38,18 @@ public class CommunityService {
     private final CommunityCommentRepository communityCommentRepository;
     private final CommunityPostLikeRepository communityPostLikeRepository;
     private final UserService userService;
+    private final UserAccountStore userAccountStore;
+
+    /**
+     * 요청 사용자를 해석한다. 로그인 사용자는 본인 계정, 비로그인(데모) 요청은
+     * 공유 데모 계정으로 귀속해 글이 PostgreSQL에 함께 저장되도록 한다.
+     */
+    private UserAccount resolveUser(Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof AuthUserPrincipal) {
+            return userService.getCurrentUser(authentication);
+        }
+        return userAccountStore.getOrCreateDemoUser();
+    }
 
     @Transactional(readOnly = true)
     public List<CommunityPostSummaryResDTO> getPosts(
@@ -43,7 +57,7 @@ public class CommunityService {
             LifeEventType category,
             Integer size
     ) {
-        UserAccount user = userService.getCurrentUser(authentication);
+        UserAccount user = resolveUser(authentication);
         Pageable pageable = PageRequest.of(0, normalizeSize(size));
         List<CommunityPost> posts = category == null
                 ? communityPostRepository.findAllByOrderByIdDesc(pageable)
@@ -64,7 +78,7 @@ public class CommunityService {
             LifeEventType category,
             Integer size
     ) {
-        UserAccount user = userService.getCurrentUser(authentication);
+        UserAccount user = resolveUser(authentication);
         Pageable pageable = PageRequest.of(0, normalizeSize(size));
         List<CommunityPost> posts = category == null
                 ? communityPostRepository.findAllByOrderByLikeCountDescIdDesc(pageable)
@@ -81,7 +95,7 @@ public class CommunityService {
 
     @Transactional(readOnly = true)
     public CommunityPostDetailResDTO getPost(Authentication authentication, Long postId) {
-        UserAccount user = userService.getCurrentUser(authentication);
+        UserAccount user = resolveUser(authentication);
         CommunityPost post = findPost(postId);
         boolean liked = communityPostLikeRepository.existsByPost_IdAndUser_Id(post.getId(), user.getId());
         List<CommunityCommentResDTO> comments = communityCommentRepository.findByPost_IdOrderByIdAsc(post.getId())
@@ -97,7 +111,7 @@ public class CommunityService {
             Authentication authentication,
             CommunityPostCreateReqDTO request
     ) {
-        UserAccount user = userService.getCurrentUser(authentication);
+        UserAccount user = resolveUser(authentication);
         CommunityPost post = CommunityPost.create(
                 user,
                 request.category(),
@@ -110,7 +124,7 @@ public class CommunityService {
 
     @Transactional
     public boolean deletePost(Authentication authentication, Long postId) {
-        UserAccount user = userService.getCurrentUser(authentication);
+        UserAccount user = resolveUser(authentication);
         CommunityPost post = findPost(postId);
         if (!post.isAuthoredBy(user.getId())) {
             throw new ProjectException(GeneralErrorCode.FORBIDDEN);
@@ -123,7 +137,7 @@ public class CommunityService {
 
     @Transactional
     public CommunityPostLikeResDTO likePost(Authentication authentication, Long postId) {
-        UserAccount user = userService.getCurrentUser(authentication);
+        UserAccount user = resolveUser(authentication);
         CommunityPost post = findPost(postId);
 
         if (!communityPostLikeRepository.existsByPost_IdAndUser_Id(post.getId(), user.getId())) {
@@ -136,7 +150,7 @@ public class CommunityService {
 
     @Transactional
     public CommunityPostLikeResDTO unlikePost(Authentication authentication, Long postId) {
-        UserAccount user = userService.getCurrentUser(authentication);
+        UserAccount user = resolveUser(authentication);
         CommunityPost post = findPost(postId);
 
         communityPostLikeRepository.findByPost_IdAndUser_Id(post.getId(), user.getId())
@@ -154,7 +168,7 @@ public class CommunityService {
             Long postId,
             CommunityCommentCreateReqDTO request
     ) {
-        UserAccount user = userService.getCurrentUser(authentication);
+        UserAccount user = resolveUser(authentication);
         CommunityPost post = findPost(postId);
         CommunityComment comment = communityCommentRepository.save(
                 CommunityComment.create(post, user, request.content().trim())
@@ -166,7 +180,7 @@ public class CommunityService {
 
     @Transactional
     public boolean deleteComment(Authentication authentication, Long postId, Long commentId) {
-        UserAccount user = userService.getCurrentUser(authentication);
+        UserAccount user = resolveUser(authentication);
         CommunityPost post = findPost(postId);
         CommunityComment comment = communityCommentRepository.findById(commentId)
                 .orElseThrow(() -> new ProjectException(GeneralErrorCode.NOT_FOUND));

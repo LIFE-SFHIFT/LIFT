@@ -66,7 +66,7 @@ function LoginInner() {
       <div className="landing-hero">
         <span className="landing-badge">✨ 생애전환 행정 도우미</span>
         <h1>
-          퇴직·이직·실직,
+          퇴직·이직·결혼,
           <br />
           LIFT로 딱
         </h1>
