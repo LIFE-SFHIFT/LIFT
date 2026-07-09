@@ -25,7 +25,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 @SpringBootTest(properties = {
         "lift.auth.jwt-secret=test-jwt-secret-32-bytes-minimum-value",
-        "lift.oauth.mock-enabled=true"
+        "lift.oauth.mock-enabled=true",
+        "lift.oauth.social-enabled=true"
 })
 @AutoConfigureMockMvc
 class CommunityControllerTest {

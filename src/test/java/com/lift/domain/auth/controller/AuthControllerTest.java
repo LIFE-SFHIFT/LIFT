@@ -25,6 +25,7 @@ import org.springframework.test.web.servlet.MvcResult;
 @SpringBootTest(properties = {
         "lift.auth.jwt-secret=test-jwt-secret-32-bytes-minimum-value",
         "lift.oauth.mock-enabled=true",
+        "lift.oauth.social-enabled=true",
         "lift.oauth.naver.client-id=test-naver-client",
         "lift.oauth.naver.client-secret=test-naver-secret"
 })

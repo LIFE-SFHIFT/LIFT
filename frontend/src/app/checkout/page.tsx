@@ -22,14 +22,14 @@ const REPORT_PLANS = [
     backendPlan: "BASIC",
     name: "기본 리포트",
     price: 6900,
-    summary: "신청 가능 항목, 우선순위, 필요 서류와 공식 링크를 확인해요.",
+    summary: "신청 가능 항목, 우선순위, 필요 서류와 공식 링크를 확인하고 PDF로 저장해요.",
   },
   {
     id: "plus",
     backendPlan: "PLUS",
     name: "확장 리포트",
     price: 13900,
-    summary: "기본 리포트에 AI 질문 10회와 PDF 저장용 금액 계산까지 함께 봐요.",
+    summary: "기본 리포트에 이 로드맵을 아는 AI에게 질문 10회를 더해요.",
   },
 ] as const satisfies readonly {
   id: string;

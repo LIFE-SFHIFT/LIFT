@@ -159,11 +159,13 @@ public class LifeReport extends BaseCreatedEntity {
     }
 
     public boolean canUseAiChat() {
-        return isPaid() && getResolvedPaymentPlan() == ReportPlanType.PLUS;
+        ReportPlanType plan = getResolvedPaymentPlan();
+        return isPaid() && plan != null && plan.getAiQuestionLimit() > 0;
     }
 
     public boolean canUsePdfEstimate() {
-        return isPaid() && getResolvedPaymentPlan() == ReportPlanType.PLUS;
+        ReportPlanType plan = getResolvedPaymentPlan();
+        return isPaid() && plan != null && plan.isPdfAvailable();
     }
 
     public boolean isAiQuestionLimitReached() {

@@ -21,6 +21,12 @@ public class OAuthProperties {
      */
     private boolean mockEnabled = false;
 
+    /**
+     * 카카오/네이버 실제 소셜 로그인 전체 스위치. 데모 기간에는 false로 두어
+     * 개인 자격증명으로 로그인되는 것을 막고, 프론트의 로컬 데모 로그인만 쓰게 한다.
+     */
+    private boolean socialEnabled = false;
+
     private ProviderRegistration kakao = new ProviderRegistration();
     private ProviderRegistration naver = new ProviderRegistration();
 

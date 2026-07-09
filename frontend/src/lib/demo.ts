@@ -200,42 +200,45 @@ const DEMO_CATALOG: DemoCatalogItem[] = [
     requiresNearPoverty: true,
     baseScore: 60,
   },
-  // ── 지역 특정 ──
+  // ── 전국 · 중장년 ──
   {
-    title: "서울형 긴급복지지원",
-    provider: "서울특별시",
-    category: "생활안정",
-    summary: "위기상황에 처한 서울시민에게 생계·의료·주거비를 신속 지원합니다.",
-    supportTarget: "위기상황에 처한 서울 거주 중위소득 100% 이하 시민",
-    benefitType: "CASH",
-    keywords: ["긴급복지", "생활안정", "생계"],
-    regionSido: "서울특별시",
-    applicationDeadline: "상시신청",
-    baseScore: 78,
+    title: "신중년 경력형 일자리 사업",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "만 50~64세 신중년에게 경력을 살린 사회공헌형 일자리를 제공합니다.",
+    supportTarget: "만 50~64세 퇴직 전문인력",
+    benefitType: "SERVICE",
+    keywords: ["중장년", "재취업", "취업", "일자리", "고용"],
+    minAge: 50,
+    maxAge: 64,
+    applicationDeadline: "연중 모집",
+    baseScore: 76,
   },
   {
-    title: "경기도형 긴급복지",
-    provider: "경기도",
-    category: "생활안정",
-    summary: "위기상황이 발생한 경기도 가구에 단기 생계·주거·의료비를 지원합니다.",
-    supportTarget: "위기상황에 처한 경기 거주 중위소득 100% 이하 가구",
-    benefitType: "CASH",
-    keywords: ["긴급복지", "생활안정", "생계"],
-    regionSido: "경기도",
+    title: "중장년내일센터 전직지원 서비스",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "만 40세 이상 중장년에게 생애설계·재취업 컨설팅과 훈련을 연계합니다.",
+    supportTarget: "만 40세 이상 재직·구직 중장년",
+    benefitType: "SERVICE",
+    keywords: ["중장년", "재취업", "취업", "전직", "구직"],
+    minAge: 40,
     applicationDeadline: "상시신청",
-    baseScore: 78,
+    baseScore: 72,
   },
+  // ── 전국 · 주거/생활 ──
   {
-    title: "부산형 긴급복지지원",
-    provider: "부산광역시",
-    category: "생활안정",
-    summary: "위기상황에 처한 부산시민에게 생계·의료비를 지원합니다.",
-    supportTarget: "위기상황에 처한 부산 거주 저소득 시민",
+    title: "주거급여(맞춤형 급여)",
+    provider: "국토교통부",
+    category: "주거",
+    summary: "소득·재산이 기준 이하인 가구에 임차료 또는 수선유지비를 지원합니다.",
+    supportTarget: "기준 중위소득 48% 이하 가구",
     benefitType: "CASH",
-    keywords: ["긴급복지", "생활안정", "생계"],
-    regionSido: "부산광역시",
+    keywords: ["주거", "생활안정", "생계", "임차", "월세"],
+    requiresNearPoverty: true,
     applicationDeadline: "상시신청",
-    baseScore: 78,
+    contact: "1600-0777",
+    baseScore: 70,
   },
   // ── 특성(전용) ──
   {
@@ -319,10 +322,51 @@ function demoSituationKeywords(inputs: DemoAssessmentInputs): string[] {
   // 특성/나이 키워드: 해당자에게만 관련 혜택이 잡히도록 확장
   if (inputs.disabledPerson) kw.add("장애");
   if (inputs.singleParent) { kw.add("한부모"); kw.add("양육"); }
-  if (inputs.basicLivelihoodRecipient) { kw.add("기초생활"); kw.add("수급"); }
-  if (inputs.nearPoverty) { kw.add("차상위"); kw.add("자활"); }
+  if (inputs.basicLivelihoodRecipient) { kw.add("기초생활"); kw.add("수급"); kw.add("주거"); }
+  if (inputs.nearPoverty) { kw.add("차상위"); kw.add("자활"); kw.add("주거"); }
+  // 나이대별 확장: 중장년(40~64)·고령(60+)에게 해당 일자리 혜택이 잡히도록.
+  if (inputs.age != null && inputs.age >= 40 && inputs.age <= 64) { kw.add("중장년"); kw.add("전직"); }
   if (inputs.age != null && inputs.age >= 60) { kw.add("노인"); kw.add("고령"); }
   return Array.from(kw);
+}
+
+/**
+ * 사용자가 입력한 거주 시/도에 맞춰 지역 전용 혜택 후보를 즉석 생성한다.
+ * 17개 시·도를 카탈로그에 모두 넣는 대신, 고른 지역명을 그대로 반영해
+ * '어느 지역을 골라도 내 지역 혜택이 뜨는' 경험을 준다(백엔드 gov24 지역 매칭 대체).
+ */
+function regionCatalogItems(inputs: DemoAssessmentInputs): DemoCatalogItem[] {
+  const sido = inputs.regionSido;
+  if (!sido) return [];
+  const shortName = sido.replace(/(특별자치도|특별자치시|특별시|광역시|특별자치|도)$/, "") || sido;
+  const items: DemoCatalogItem[] = [
+    {
+      title: `${shortName} 긴급복지지원`,
+      provider: sido,
+      category: "생활안정",
+      summary: `위기상황에 처한 ${sido} 거주 시민에게 생계·의료·주거비를 신속 지원합니다.`,
+      supportTarget: `위기상황에 처한 ${sido} 거주 중위소득 100% 이하 가구`,
+      benefitType: "CASH",
+      keywords: ["긴급복지", "생활안정", "생계"],
+      regionSido: sido,
+      applicationDeadline: "상시신청",
+      contact: "129",
+      baseScore: 79,
+    },
+    {
+      title: `${shortName} 지역맞춤 일자리사업`,
+      provider: `${sido} 일자리센터`,
+      category: "고용·창업",
+      summary: `${sido}가 지역 구직자에게 맞춤형 일자리와 취업지원 서비스를 제공합니다.`,
+      supportTarget: `${sido} 거주 구직자`,
+      benefitType: "SERVICE",
+      keywords: ["취업", "구직", "재취업", "고용", "일자리"],
+      regionSido: sido,
+      applicationDeadline: "상시신청",
+      baseScore: 71,
+    },
+  ];
+  return items;
 }
 
 interface DemoAssessmentInputs {
@@ -445,7 +489,9 @@ function buildDemoBenefits(inputs: DemoAssessmentInputs): {
   const pending: PublicBenefit[] = [];
   const required = new Set<string>();
 
-  for (const item of DEMO_CATALOG) {
+  // 고정 카탈로그 + 입력한 지역 맞춤 항목을 함께 같은 규칙으로 매칭한다.
+  const catalog = [...DEMO_CATALOG, ...regionCatalogItems(inputs)];
+  for (const item of catalog) {
     // 1) 키워드 매칭: 상황 키워드와 하나라도 겹쳐야 후보
     if (!item.keywords.some((k) => situationKw.includes(k))) continue;
     // 2) 지역 불일치 제외
@@ -1114,7 +1160,8 @@ export const demoApi = {
       paymentPlan: plan,
       paymentAmount: amount,
       aiChatAvailable: plan === "PLUS",
-      pdfAvailable: plan === "PLUS",
+      // PDF 저장은 기본(6,900원) 플랜부터 제공한다. AI 질문만 확장 플랜 전용.
+      pdfAvailable: true,
       aiQuestionLimit: aiLimit,
       aiQuestionUsedCount: 0,
       aiQuestionRemaining: aiLimit,
@@ -1126,7 +1173,7 @@ export const demoApi = {
       paymentPlan: plan,
       paymentAmount: amount,
       aiChatAvailable: plan === "PLUS",
-      pdfAvailable: plan === "PLUS",
+      pdfAvailable: true,
     });
   },
 
@@ -1147,7 +1194,7 @@ export const demoApi = {
   getPdfReport(_reportId: number, payload: ReportPdfEstimateRequest): Promise<ReportDetail> {
     const base = requireReport();
     if (!base.pdfAvailable) {
-      throw new Error("확장 리포트 결제 후 이용할 수 있습니다.");
+      throw new Error("리포트 결제 후 이용할 수 있습니다.");
     }
     const assessment = savedAssessment();
     // 진단 입력이 없으면(구버전 리포트 등) 저장된 리포트 그대로 반환한다.

@@ -133,7 +133,7 @@ public class LifeReportService {
             Long reportId,
             ReportPdfEstimateReqDTO request
     ) {
-        LifeReport report = reportAccessManager.getPlusPaidOwnedReport(authentication, reportId);
+        LifeReport report = reportAccessManager.getPdfCapableOwnedReport(authentication, reportId);
         Integer monthlyAverageWage = request == null ? null : request.monthlyAverageWage();
         BenefitEstimationService.ReportEstimation estimation = monthlyAverageWage == null
                 ? benefitEstimationService.estimateWithoutMonthlyWage(report)

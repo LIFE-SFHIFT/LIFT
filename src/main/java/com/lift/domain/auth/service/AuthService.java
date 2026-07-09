@@ -27,6 +27,7 @@ public class AuthService {
     private final OAuthStateStore oAuthStateStore;
 
     public URI createLoginRedirectUri(SocialProvider provider) {
+        requireSocialLoginEnabled();
         OAuthProperties.ProviderRegistration registration = oAuthProperties.getRegistration(provider);
         if (registration == null || !registration.isConfigured()) {
             if (oAuthProperties.isMockEnabled()) {
@@ -54,6 +55,16 @@ public class AuthService {
         return builder.encode().build().toUri();
     }
 
+    /**
+     * 데모 기간에는 실제 카카오/네이버 로그인을 서버에서도 차단한다.
+     * 프론트 버튼을 숨겨도 URL 직접 접근으로 우회할 수 있으므로 여기서 최종 방어한다.
+     */
+    private void requireSocialLoginEnabled() {
+        if (!oAuthProperties.isSocialEnabled()) {
+            throw new ProjectException(GeneralErrorCode.FORBIDDEN);
+        }
+    }
+
     private URI createMockLoginRedirectUri(
             SocialProvider provider,
             OAuthProperties.ProviderRegistration registration
@@ -67,6 +78,7 @@ public class AuthService {
     }
 
     public AuthLoginResDTO loginWithCallback(SocialProvider provider, String code, String state) {
+        requireSocialLoginEnabled();
         if (!StringUtils.hasText(code)) {
             throw new ProjectException(GeneralErrorCode.BAD_REQUEST);
         }

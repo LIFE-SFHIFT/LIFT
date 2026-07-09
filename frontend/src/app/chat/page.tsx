@@ -42,8 +42,8 @@ function ChatEntryInner() {
         </div>
         {error && <div className="error-box">{error}</div>}
         <p className="page-sub" style={{ marginTop: 0 }}>
-          AI챗봇은 결제 완료된 리포트 내용을 기준으로 답변합니다. 새 로드맵을 만들고 결제까지
-          완료하면 상단 메뉴에서 바로 이어서 질문할 수 있어요.
+          AI챗봇은 확장 리포트(13,900원) 결제가 완료된 로드맵을 기준으로 답변합니다. 로드맵을
+          만들고 확장 리포트로 결제하면 상단 메뉴에서 바로 이어서 질문할 수 있어요.
         </p>
         <div className="sticky-cta" style={{ position: "static", padding: 0, marginTop: 18 }}>
           <button type="button" className="btn" onClick={() => router.push("/onboarding/life-event")}>

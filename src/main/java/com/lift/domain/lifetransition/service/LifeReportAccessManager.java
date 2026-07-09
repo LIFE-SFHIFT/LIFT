@@ -48,11 +48,23 @@ public class LifeReportAccessManager {
     }
 
     /**
-     * 소유권 + 결제 완료 + 확장 리포트 권한을 검증한다. AI/PDF 같은 유료 부가 기능에 사용한다.
+     * 소유권 + 결제 완료 + AI 질문 권한(확장 리포트)을 검증한다. AI 챗 기능에 사용한다.
      */
-    public LifeReport getPlusPaidOwnedReport(Authentication authentication, Long reportId) {
+    public LifeReport getAiChatCapableOwnedReport(Authentication authentication, Long reportId) {
         LifeReport report = getPaidOwnedReport(authentication, reportId);
-        if (!report.canUseAiChat() || !report.canUsePdfEstimate()) {
+        if (!report.canUseAiChat()) {
+            throw new ProjectException(LifeTransitionErrorCode.PLAN_UPGRADE_REQUIRED);
+        }
+
+        return report;
+    }
+
+    /**
+     * 소유권 + 결제 완료 + PDF 저장 권한을 검증한다. PDF 예상 수령액 기능에 사용한다.
+     */
+    public LifeReport getPdfCapableOwnedReport(Authentication authentication, Long reportId) {
+        LifeReport report = getPaidOwnedReport(authentication, reportId);
+        if (!report.canUsePdfEstimate()) {
             throw new ProjectException(LifeTransitionErrorCode.PLAN_UPGRADE_REQUIRED);
         }
 

@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum ReportPlanType {
 
-    BASIC(6_900, 0, false, "기본 리포트"),
+    BASIC(6_900, 0, true, "기본 리포트"),
     PLUS(13_900, 10, true, "확장 리포트");
 
     private final int price;

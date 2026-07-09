@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
-import { api } from "@/lib/api";
 import { startDemoSession } from "@/lib/auth";
 
 const FEATURES = [
@@ -31,8 +30,9 @@ const FEATURES = [
 function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const [loading, setLoading] = useState<"kakao" | "naver" | "demo" | null>(null);
+  const [loading, setLoading] = useState<"demo" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (params.get("expired")) {
@@ -40,16 +40,17 @@ function LoginInner() {
     }
   }, [params]);
 
-  async function handleLogin(provider: "kakao" | "naver") {
-    setLoading(provider);
+  // 데모 기간에는 카카오/네이버 실제 로그인을 막고(서버에서도 차단) 데모 로그인으로 안내한다.
+  function handleSocialLoginBlocked() {
     setError(null);
-    api.startSocialLogin(provider);
+    setNotice("지금은 데모 기간이에요. 아래 '데모용 로그인'으로 모든 기능을 체험해 주세요.");
   }
 
   function handleDemoLogin() {
     setLoading("demo");
     setError(null);
 
+    setNotice(null);
     // 데모는 백엔드 소셜 로그인을 타지 않고 브라우저 로컬 데모 세션으로 바로 체험한다.
     // (실제 kakao/naver 자격증명이 설정되면 백엔드 mock 콜백은 state 검증에 막히므로 로컬 데모가 안전하다.)
     try {
@@ -89,25 +90,26 @@ function LoginInner() {
       </div>
 
       {error && <div className="error-box">{error}</div>}
+      {notice && <div className="warning-box">{notice}</div>}
 
       <div className="sticky-cta" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <button
           type="button"
           className="btn kakao"
           disabled={loading !== null}
-          onClick={() => handleLogin("kakao")}
+          onClick={handleSocialLoginBlocked}
         >
           <span className="btn-ico">💬</span>
-          {loading === "kakao" ? "로그인 중…" : "카카오로 시작하기"}
+          카카오로 시작하기
         </button>
         <button
           type="button"
           className="btn naver"
           disabled={loading !== null}
-          onClick={() => handleLogin("naver")}
+          onClick={handleSocialLoginBlocked}
         >
           <span className="btn-ico">Ⓝ</span>
-          {loading === "naver" ? "로그인 중…" : "네이버로 시작하기"}
+          네이버로 시작하기
         </button>
         <button
           type="button"

@@ -542,7 +542,7 @@ function ReportInner({ reportId }: { reportId: number }) {
 
   function openPdfVersion(monthlyAverageWage: number | null) {
     if (!report?.pdfAvailable) {
-      setPdfError("PDF 저장은 확장 리포트 결제 후 이용할 수 있어요.");
+      setPdfError("PDF 저장은 리포트 결제 후 이용할 수 있어요.");
       return;
     }
     setPdfError(null);
@@ -821,7 +821,7 @@ function ReportInner({ reportId }: { reportId: number }) {
             if (report.pdfAvailable) setShowPdfOptions(true);
           }}
         >
-          {report.pdfAvailable ? "예상 수령액 리포트 PDF로 저장" : "PDF 저장은 확장 리포트에서 이용 가능"}
+          {report.pdfAvailable ? "예상 수령액 리포트 PDF로 저장" : "PDF 저장은 리포트 결제 후 이용 가능"}
         </button>
       </div>
     </>
