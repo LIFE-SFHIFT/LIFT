@@ -3,6 +3,7 @@ package com.lift.domain.lifetransition.service;
 import com.lift.domain.lifetransition.dto.response.LifeReportResDTO.BenefitRecommendationResult;
 import com.lift.domain.lifetransition.dto.response.PublicBenefitResDTO;
 import com.lift.domain.lifetransition.dto.response.RequiredDocumentResDTO;
+import com.lift.domain.lifetransition.enumtype.AnnualIncomeRange;
 import com.lift.domain.lifetransition.enumtype.HouseholdType;
 import com.lift.domain.lifetransition.enumtype.LifeEventType;
 import com.lift.domain.lifetransition.enumtype.PublicBenefitFitLevel;
@@ -45,6 +46,13 @@ public class Gov24PublicBenefitService {
     private static final String SOURCE_LABEL = "공공데이터포털 · 정부24 공공서비스";
     private static final Duration CACHE_TTL = Duration.ofMinutes(30);
 
+    /** 소관기관명 앞부분으로 지역 전용 혜택을 판별하기 위한 광역시·도 목록(정부24 표기 기준). */
+    private static final List<String> SIDO_NAMES = List.of(
+            "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시", "대전광역시",
+            "울산광역시", "세종특별자치시", "경기도", "강원특별자치도", "충청북도", "충청남도",
+            "전북특별자치도", "전라남도", "경상북도", "경상남도", "제주특별자치도"
+    );
+
     private final Gov24BenefitCacheRepository gov24BenefitCacheRepository;
     private final Gov24PublicServiceProperties properties;
     private final PublicBenefitRecommendationService recommendationService;
@@ -76,12 +84,15 @@ public class Gov24PublicBenefitService {
             if (!StringUtils.hasText(matchedKeyword)) {
                 continue;
             }
+            if (regionMismatch(row, assessment)) {
+                continue;
+            }
             if (excludedByStructuredCriteria(cached, assessment, isInvoluntary)) {
                 continue;
             }
 
             boolean verifiedMatch = hasVerifiedStructuredMatch(cached, assessment, isInvoluntary);
-            BenefitCandidate candidate = toCandidate(report, row, null, matchedKeyword, verifiedMatch);
+            BenefitCandidate candidate = toCandidate(report, cached, row, null, matchedKeyword, verifiedMatch);
             if (candidate == null) {
                 continue;
             }
@@ -138,7 +149,93 @@ public class Gov24PublicBenefitService {
         if (Boolean.TRUE.equals(cached.getIsInvoluntarySub()) && !isInvoluntary) {
             return true;
         }
+
+        // 연소득: 사용자 소득구간의 '하한'이 혜택 상한을 이미 넘으면 명백히 자격 밖이다.
+        Long incomeLowerBound = annualIncomeLowerBound(assessment.getAnnualIncomeRange());
+        if (incomeLowerBound != null && cached.getMaxAnnualIncomeWon() != null
+                && incomeLowerBound > cached.getMaxAnnualIncomeWon()) {
+            return true;
+        }
+
+        // '전용' 혜택인데 사용자가 명시적으로 아니라고 답한 경우만 제외한다(값이 없으면(null) 제외하지 않음).
+        if (Boolean.TRUE.equals(cached.getRequiresBasicLivelihood())
+                && Boolean.FALSE.equals(assessment.getBasicLivelihoodRecipient())) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(cached.getRequiresSingleParent())
+                && Boolean.FALSE.equals(assessment.getSingleParent())) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(cached.getRequiresDisabled())
+                && Boolean.FALSE.equals(assessment.getDisabledPerson())) {
+            return true;
+        }
+        // 차상위 전용은 수급자도 대상에 포함되므로, 둘 다 명시적으로 아닐 때만 제외한다.
+        if (Boolean.TRUE.equals(cached.getRequiresNearPoverty())
+                && Boolean.FALSE.equals(assessment.getNearPoverty())
+                && Boolean.FALSE.equals(assessment.getBasicLivelihoodRecipient())) {
+            return true;
+        }
         return false;
+    }
+
+    /**
+     * 지역 전용 혜택인데 사용자의 거주지와 다르면 true(제외 대상).
+     *
+     * <p>소관기관명 앞부분이 광역시·도면 그 지역 주민만 대상이므로, 사용자 시/도와 다르면 제외한다.
+     * 시/군/구까지 명시된 혜택(예: "서울특별시 서초구")은 사용자 시/군/구와도 대조한다. 소관기관이
+     * 중앙부처/공단 등(전국)이거나, 사용자가 지역을 입력하지 않았으면 제외하지 않는다.
+     */
+    private boolean regionMismatch(Map<String, Object> row, LifeAssessment assessment) {
+        String org = value(row, "소관기관명", "제공기관명", "기관명", "부서명");
+        if (!StringUtils.hasText(org)) {
+            return false;
+        }
+        String benefitSido = SIDO_NAMES.stream()
+                .filter(org::startsWith)
+                .findFirst()
+                .orElse(null);
+        if (benefitSido == null) {
+            // 중앙부처/공단/재단 등 → 전국 대상으로 간주, 지역으로 제외하지 않음.
+            return false;
+        }
+
+        String userSido = assessment.getRegionSido();
+        if (!StringUtils.hasText(userSido)) {
+            // 사용자가 지역을 입력하지 않으면 지역으로 걸러낼 근거가 없다.
+            return false;
+        }
+        if (!userSido.startsWith(benefitSido) && !benefitSido.startsWith(userSido)) {
+            return true; // 시/도가 다르면 명백히 대상 밖.
+        }
+
+        // 시/도가 같고, 혜택이 시/군/구까지 특정하면 시/군/구도 대조한다.
+        String benefitSigungu = org.substring(benefitSido.length()).trim();
+        if (benefitSigungu.contains(" ")) {
+            benefitSigungu = benefitSigungu.substring(0, benefitSigungu.indexOf(' '));
+        }
+        String userSigungu = assessment.getRegionSigungu();
+        if (StringUtils.hasText(benefitSigungu)
+                && StringUtils.hasText(userSigungu)
+                && !userSigungu.equals(benefitSigungu)) {
+            return true;
+        }
+        return false;
+    }
+
+    /** 연소득 구간의 하한(원). 소득 정보가 없거나(UNKNOWN/NONE) 미상이면 null. */
+    private Long annualIncomeLowerBound(AnnualIncomeRange range) {
+        if (range == null) {
+            return null;
+        }
+        return switch (range) {
+            case UNDER_22M -> 12_000_000L;
+            case UNDER_32M -> 22_000_000L;
+            case UNDER_44M -> 32_000_000L;
+            case UNDER_50M -> 44_000_000L;
+            case OVER_50M -> 50_000_000L;
+            case UNKNOWN, NONE -> null;
+        };
     }
 
     /**
@@ -158,6 +255,23 @@ public class Gov24PublicBenefitService {
             return true;
         }
         if (Boolean.TRUE.equals(cached.getIsInvoluntarySub()) && isInvoluntary) {
+            return true;
+        }
+        // 소득/수급/한부모/장애 '전용' 조건을 사용자 값과 대조해 부합한 경우도 검증된 매칭으로 본다.
+        if (cached.getMaxAnnualIncomeWon() != null && annualIncomeLowerBound(assessment.getAnnualIncomeRange()) != null) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(cached.getRequiresBasicLivelihood()) && Boolean.TRUE.equals(assessment.getBasicLivelihoodRecipient())) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(cached.getRequiresSingleParent()) && Boolean.TRUE.equals(assessment.getSingleParent())) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(cached.getRequiresDisabled()) && Boolean.TRUE.equals(assessment.getDisabledPerson())) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(cached.getRequiresNearPoverty())
+                && (Boolean.TRUE.equals(assessment.getNearPoverty()) || Boolean.TRUE.equals(assessment.getBasicLivelihoodRecipient()))) {
             return true;
         }
         return false;
@@ -215,6 +329,7 @@ public class Gov24PublicBenefitService {
 
     private BenefitCandidate toCandidate(
             LifeReport report,
+            Gov24BenefitCache cached,
             Map<String, Object> row,
             Map<String, Object> detail,
             String keyword,
@@ -241,7 +356,7 @@ public class Gov24PublicBenefitService {
         String contact = value(source, "전화문의", "문의처");
         List<RequiredDocumentResDTO> documents = extractDocuments(source);
         String reason = buildReason(assessment, title, summary, provider, keyword);
-        int score = score(assessment, title, summary, provider, supportTarget, selectionCriteria, supportContent, applicationDeadline, keyword, applicationUrl, verifiedMatch);
+        int score = score(assessment, cached, title, summary, provider, supportTarget, selectionCriteria, supportContent, applicationDeadline, keyword, applicationUrl, verifiedMatch);
         PublicBenefitFitLevel fitLevel = fitLevel(score, supportTarget, selectionCriteria);
         PublicBenefitPriorityGroup priorityGroup = priorityGroup(assessment, title, supportContent, applicationDeadline, fitLevel);
         List<String> missingInputs = missingInputs(assessment, supportTarget, selectionCriteria);
@@ -341,6 +456,7 @@ public class Gov24PublicBenefitService {
 
     private int score(
             LifeAssessment assessment,
+            Gov24BenefitCache cached,
             String title,
             String summary,
             String provider,
@@ -385,17 +501,49 @@ public class Gov24PublicBenefitService {
                 score += 10;
             }
         }
-        if (Boolean.TRUE.equals(assessment.getBasicLivelihoodRecipient()) && containsAny(merged, "기초생활", "수급자")) {
-            score += 14;
+        // 수급/차상위/한부모/장애: 구조화 컬럼이 추출돼 있으면 정확한 컬럼 매칭을 쓰고,
+        // 아직 추출 전(null)이면 기존 텍스트 포함 검사로 폴백한다.
+        if (Boolean.TRUE.equals(assessment.getBasicLivelihoodRecipient())) {
+            if (cached.getRequiresBasicLivelihood() != null) {
+                if (Boolean.TRUE.equals(cached.getRequiresBasicLivelihood())) {
+                    score += 14;
+                }
+            } else if (containsAny(merged, "기초생활", "수급자")) {
+                score += 14;
+            }
         }
-        if (Boolean.TRUE.equals(assessment.getNearPoverty()) && containsAny(merged, "차상위", "저소득")) {
-            score += 12;
+        if (Boolean.TRUE.equals(assessment.getNearPoverty())) {
+            if (cached.getRequiresNearPoverty() != null) {
+                if (Boolean.TRUE.equals(cached.getRequiresNearPoverty())) {
+                    score += 12;
+                }
+            } else if (containsAny(merged, "차상위", "저소득")) {
+                score += 12;
+            }
         }
-        if (Boolean.TRUE.equals(assessment.getSingleParent()) && contains(merged, "한부모")) {
-            score += 12;
+        if (Boolean.TRUE.equals(assessment.getSingleParent())) {
+            if (cached.getRequiresSingleParent() != null) {
+                if (Boolean.TRUE.equals(cached.getRequiresSingleParent())) {
+                    score += 12;
+                }
+            } else if (contains(merged, "한부모")) {
+                score += 12;
+            }
         }
-        if (Boolean.TRUE.equals(assessment.getDisabledPerson()) && containsAny(merged, "장애", "장애인")) {
-            score += 12;
+        if (Boolean.TRUE.equals(assessment.getDisabledPerson())) {
+            if (cached.getRequiresDisabled() != null) {
+                if (Boolean.TRUE.equals(cached.getRequiresDisabled())) {
+                    score += 12;
+                }
+            } else if (containsAny(merged, "장애", "장애인")) {
+                score += 12;
+            }
+        }
+        // 연소득: 사용자 소득이 혜택 상한 이하로 확인되면 정합성 가점.
+        Long incomeLowerBound = annualIncomeLowerBound(assessment.getAnnualIncomeRange());
+        if (incomeLowerBound != null && cached.getMaxAnnualIncomeWon() != null
+                && incomeLowerBound <= cached.getMaxAnnualIncomeWon()) {
+            score += 8;
         }
         if (assessment.getHousingType() != null && containsAny(merged, "월세", "전세", "주거", "임대")) {
             score += 8;

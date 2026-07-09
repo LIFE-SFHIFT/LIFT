@@ -29,6 +29,15 @@ public class Gov24PublicServiceProperties {
 
     private int maxResults = 6;
 
+    /** true면 매일 정부24 API를 조회해 DB를 UPSERT하는 스케줄러가 동작한다. 기본 off(수동/운영에서만 on). */
+    private boolean syncEnabled = false;
+
+    /** 동기화 실행 주기(cron). 기본 매일 09:00. */
+    private String syncCron = "0 0 9 * * *";
+
+    /** 한 번의 동기화에서 AI 구조화 추출을 시도할 최대 건수(비용 상한). */
+    private int syncExtractBatchSize = 200;
+
     public boolean isAvailable() {
         return enabled;
     }

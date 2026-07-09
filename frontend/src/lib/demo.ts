@@ -17,6 +17,7 @@ import type {
   EligibilityLevel,
   LatestChatReport,
   LatestReportRoute,
+  LifeEventType,
   PaymentCompleteRequest,
   PaymentResponse,
   PublicBenefit,
@@ -53,31 +54,241 @@ function planAiLimit(plan: ReportPlanType): number {
 }
 
 /**
- * 실제 gov24_benefit_cache에서 나이 조건이 명확히 검증된 항목과 동일한 값.
- * (다른 3건은 나이 조건이 허구이거나 제도 자체가 불확실해 검증 후 DB에서 제외됨 — 데모에도 반영하지 않는다.)
+ * 데모 로그인(백엔드 미연동) 전용 목업 혜택 카탈로그.
+ *
+ * <p>실제 백엔드는 Supabase gov24_benefit_cache(100+건)를 읽어 매칭하지만, 데모는 프론트에서만
+ * 돌아가므로 대표성 있는 소규모 카탈로그를 두고 백엔드와 동일한 매칭 규칙(키워드·지역·나이·특성)을
+ * 적용한다. 그래서 데모에서도 입력값(지역/나이/장애/한부모/소득 등)에 따라 후보가 달라진다.
+ *
+ * regionSido가 null이면 전국(중앙부처), requires*가 true면 그 특성 전용(해당자만 노출)이다.
  */
-const DEMO_BENEFIT_MASTER = [
+interface DemoCatalogItem {
+  title: string;
+  provider: string;
+  category: string;
+  summary: string;
+  supportTarget: string;
+  benefitType: "CASH" | "TRAINING" | "SERVICE";
+  /** 이 혜택이 연결되는 상황 키워드. 사용자 상황 키워드와 겹치면 후보로 잡힌다. */
+  keywords: string[];
+  regionSido?: string;
+  regionSigungu?: string;
+  minAge?: number;
+  maxAge?: number;
+  minInsuranceMonths?: number;
+  isInvoluntarySub?: boolean;
+  requiresDisabled?: boolean;
+  requiresSingleParent?: boolean;
+  requiresBasicLivelihood?: boolean;
+  requiresNearPoverty?: boolean;
+  applicationDeadline?: string;
+  applicationUrl?: string;
+  contact?: string;
+  requiredDocuments?: string[];
+  /** 기본 관련도 점수(높을수록 상단). 지역·특성·나이 정합 시 가점된다. */
+  baseScore: number;
+}
+
+const DEMO_CATALOG: DemoCatalogItem[] = [
+  // ── 전국 · 고용/실업 ──
   {
-    title: "청년 일자리 도약 장려금",
-    minAge: 15,
-    maxAge: 34,
-    minInsuranceMonths: 0,
-    minTenureYears: 0,
-    isInvoluntarySub: false,
+    title: "실업급여(구직급여)",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "비자발적으로 이직한 고용보험 피보험자에게 구직급여를 지급합니다.",
+    supportTarget: "고용보험 가입 후 비자발적으로 이직해 재취업을 준비하는 구직자",
     benefitType: "CASH",
-    requiredDocuments: ["체결 근로계약서", "사업자등록증"],
+    keywords: ["실업", "구직", "구직급여", "실업급여", "고용보험"],
+    minInsuranceMonths: 6,
+    applicationDeadline: "이직 후 지체없이",
+    applicationUrl: "https://www.work24.go.kr",
+    contact: "1350",
+    requiredDocuments: ["이직확인서", "고용보험 피보험자격 이력"],
+    baseScore: 88,
+  },
+  {
+    title: "국민취업지원제도",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "저소득 구직자에게 구직촉진수당과 취업지원서비스를 제공합니다.",
+    supportTarget: "15~69세 저소득 구직자",
+    benefitType: "CASH",
+    keywords: ["구직", "국민취업지원", "실업", "취업"],
+    minAge: 15,
+    maxAge: 69,
+    applicationDeadline: "상시신청",
+    applicationUrl: "https://www.work24.go.kr",
+    contact: "1350",
+    baseScore: 84,
   },
   {
     title: "국민내일배움카드",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "직업훈련 희망자에게 훈련비와 훈련장려금을 지원합니다.",
+    supportTarget: "직업훈련을 희망하는 국민(만 75세 이상 등 제외)",
+    benefitType: "TRAINING",
+    keywords: ["직업훈련", "내일배움", "재취업", "취업"],
     minAge: 15,
     maxAge: 75,
-    minInsuranceMonths: 0,
-    minTenureYears: 0,
-    isInvoluntarySub: false,
-    benefitType: "TRAINING",
+    applicationDeadline: "상시신청",
+    applicationUrl: "https://www.hrd.go.kr",
+    contact: "1350",
     requiredDocuments: ["신분증", "직업훈련 가입신청서"],
+    baseScore: 80,
   },
-] as const;
+  {
+    title: "조기재취업수당",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "구직급여 수급 중 조기에 재취업하면 남은 급여의 일부를 지급합니다.",
+    supportTarget: "구직급여 수급자 중 소정급여일수를 절반 이상 남기고 재취업한 사람",
+    benefitType: "CASH",
+    keywords: ["재취업", "구직", "취업"],
+    applicationDeadline: "재취업 후 12개월 경과 시",
+    contact: "1350",
+    baseScore: 68,
+  },
+  {
+    title: "청년 일자리 도약 장려금",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "청년(만 15~34세)을 정규직으로 채용한 중소기업에 인건비를 지원합니다.",
+    supportTarget: "만 15~34세 청년",
+    benefitType: "CASH",
+    keywords: ["취업", "고용", "청년", "재취업"],
+    minAge: 15,
+    maxAge: 34,
+    applicationUrl: "https://www.work24.go.kr",
+    requiredDocuments: ["근로계약서", "사업자등록증"],
+    baseScore: 82,
+  },
+  {
+    title: "긴급복지 생계지원",
+    provider: "보건복지부",
+    category: "생활안정",
+    summary: "갑작스러운 위기로 생계가 곤란한 가구에 생계비를 지원합니다.",
+    supportTarget: "실직·휴폐업 등 위기사유로 생계가 곤란한 가구",
+    benefitType: "CASH",
+    keywords: ["긴급복지", "생활안정", "생계", "실업"],
+    applicationDeadline: "상시신청",
+    contact: "129",
+    baseScore: 76,
+  },
+  // ── 전국 · 고령 ──
+  {
+    title: "노인 일자리 및 사회활동 지원",
+    provider: "보건복지부",
+    category: "고용·창업",
+    summary: "만 65세 이상 어르신에게 일자리와 활동수당을 제공합니다.",
+    supportTarget: "만 65세 이상(일부 60세 이상)",
+    benefitType: "SERVICE",
+    keywords: ["노인", "고령", "일자리"],
+    minAge: 60,
+    applicationDeadline: "연중 모집",
+    baseScore: 74,
+  },
+  {
+    title: "노인 보청기 지원 사업",
+    provider: "보건복지부",
+    category: "생활안정",
+    summary: "저소득 어르신에게 보청기 구입비를 지원합니다.",
+    supportTarget: "만 65세 이상 기초생활수급자·차상위계층",
+    benefitType: "SERVICE",
+    keywords: ["노인", "고령"],
+    minAge: 65,
+    requiresNearPoverty: true,
+    baseScore: 60,
+  },
+  // ── 지역 특정 ──
+  {
+    title: "서울형 긴급복지지원",
+    provider: "서울특별시",
+    category: "생활안정",
+    summary: "위기상황에 처한 서울시민에게 생계·의료·주거비를 신속 지원합니다.",
+    supportTarget: "위기상황에 처한 서울 거주 중위소득 100% 이하 시민",
+    benefitType: "CASH",
+    keywords: ["긴급복지", "생활안정", "생계"],
+    regionSido: "서울특별시",
+    applicationDeadline: "상시신청",
+    baseScore: 78,
+  },
+  {
+    title: "경기도형 긴급복지",
+    provider: "경기도",
+    category: "생활안정",
+    summary: "위기상황이 발생한 경기도 가구에 단기 생계·주거·의료비를 지원합니다.",
+    supportTarget: "위기상황에 처한 경기 거주 중위소득 100% 이하 가구",
+    benefitType: "CASH",
+    keywords: ["긴급복지", "생활안정", "생계"],
+    regionSido: "경기도",
+    applicationDeadline: "상시신청",
+    baseScore: 78,
+  },
+  {
+    title: "부산형 긴급복지지원",
+    provider: "부산광역시",
+    category: "생활안정",
+    summary: "위기상황에 처한 부산시민에게 생계·의료비를 지원합니다.",
+    supportTarget: "위기상황에 처한 부산 거주 저소득 시민",
+    benefitType: "CASH",
+    keywords: ["긴급복지", "생활안정", "생계"],
+    regionSido: "부산광역시",
+    applicationDeadline: "상시신청",
+    baseScore: 78,
+  },
+  // ── 특성(전용) ──
+  {
+    title: "장애인 취업성공패키지",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "구직 장애인에게 단계별 취업지원 서비스와 수당을 제공합니다.",
+    supportTarget: "만 18~69세 구직장애인",
+    benefitType: "SERVICE",
+    keywords: ["장애", "취업", "구직", "직업훈련"],
+    minAge: 18,
+    maxAge: 69,
+    requiresDisabled: true,
+    applicationUrl: "https://www.work24.go.kr",
+    baseScore: 84,
+  },
+  {
+    title: "저소득 한부모가족 생활안정 지원",
+    provider: "성평등가족부",
+    category: "생활안정",
+    summary: "저소득 한부모가족에게 아동양육비 등 생활안정 비용을 지원합니다.",
+    supportTarget: "기준 중위소득 이하 한부모가족",
+    benefitType: "CASH",
+    keywords: ["한부모", "생활안정", "양육"],
+    requiresSingleParent: true,
+    applicationDeadline: "상시신청",
+    baseScore: 80,
+  },
+  {
+    title: "기초생활보장 생계급여",
+    provider: "보건복지부",
+    category: "생활안정",
+    summary: "소득인정액이 기준 중위소득 32% 이하인 가구에 생계급여를 지급합니다.",
+    supportTarget: "기초생활수급(생계급여) 대상 가구",
+    benefitType: "CASH",
+    keywords: ["기초생활", "생계", "생활안정", "수급"],
+    requiresBasicLivelihood: true,
+    applicationDeadline: "상시신청",
+    baseScore: 78,
+  },
+  {
+    title: "자활근로(기초·차상위)",
+    provider: "보건복지부",
+    category: "고용·창업",
+    summary: "근로능력 있는 저소득층에게 자활 일자리와 소득을 제공합니다.",
+    supportTarget: "기초생활수급자·차상위계층 중 근로 가능자",
+    benefitType: "SERVICE",
+    keywords: ["차상위", "자활", "생활안정", "취업", "일자리"],
+    requiresNearPoverty: true,
+    applicationDeadline: "상시신청",
+    baseScore: 72,
+  },
+];
 
 const INVOLUNTARY_REASONS: ResignationReason[] = [
   "CONTRACT_EXPIRED",
@@ -85,11 +296,47 @@ const INVOLUNTARY_REASONS: ResignationReason[] = [
   "COMPANY_CLOSURE",
 ];
 
+/** 사용자가 입력한 시/도와 혜택 지역이 명백히 다르면 true(제외 대상). 백엔드 regionMismatch와 동일. */
+function demoRegionMismatch(item: DemoCatalogItem, inputs: DemoAssessmentInputs): boolean {
+  if (!item.regionSido) return false; // 전국(중앙부처)
+  if (!inputs.regionSido) return false; // 사용자가 지역 미입력 → 거를 근거 없음
+  if (item.regionSido !== inputs.regionSido) return true;
+  if (item.regionSigungu && inputs.regionSigungu && item.regionSigungu !== inputs.regionSigungu) {
+    return true;
+  }
+  return false;
+}
+
+/** 사용자 상황·특성에서 검색 키워드를 만든다. 백엔드 buildKeywords + 특성 키워드 확장과 동일한 취지. */
+function demoSituationKeywords(inputs: DemoAssessmentInputs): string[] {
+  const kw = new Set<string>();
+  const base: Record<string, string[]> = {
+    RETIREMENT: ["실업급여", "구직급여", "구직", "실업", "퇴직", "재취업", "직업훈련", "내일배움", "생활안정", "고용", "긴급복지", "생계", "취업", "고용보험"],
+    UNEMPLOYMENT: ["실업", "구직", "구직급여", "국민취업지원", "직업훈련", "내일배움", "긴급복지", "생활안정", "생계", "재취업", "취업", "고용", "고용보험"],
+    JOB_CHANGE: ["이직", "재취업", "취업", "직업훈련", "내일배움", "고용", "구직", "일자리"],
+  };
+  (base[inputs.eventType ?? "UNEMPLOYMENT"] ?? base.UNEMPLOYMENT).forEach((k) => kw.add(k));
+  // 특성/나이 키워드: 해당자에게만 관련 혜택이 잡히도록 확장
+  if (inputs.disabledPerson) kw.add("장애");
+  if (inputs.singleParent) { kw.add("한부모"); kw.add("양육"); }
+  if (inputs.basicLivelihoodRecipient) { kw.add("기초생활"); kw.add("수급"); }
+  if (inputs.nearPoverty) { kw.add("차상위"); kw.add("자활"); }
+  if (inputs.age != null && inputs.age >= 60) { kw.add("노인"); kw.add("고령"); }
+  return Array.from(kw);
+}
+
 interface DemoAssessmentInputs {
+  eventType: LifeEventType | null;
   age: number | null;
   tenureYears: number | null;
   employmentInsuranceMonths: number | null;
   resignationReason: ResignationReason | null;
+  regionSido: string | null;
+  regionSigungu: string | null;
+  disabledPerson: boolean;
+  singleParent: boolean;
+  basicLivelihoodRecipient: boolean;
+  nearPoverty: boolean;
 }
 
 function saveAssessmentInputs(inputs: DemoAssessmentInputs): DemoAssessmentInputs {
@@ -98,14 +345,93 @@ function saveAssessmentInputs(inputs: DemoAssessmentInputs): DemoAssessmentInput
 
 function readAssessmentInputs(): DemoAssessmentInputs {
   return readJson(ASSESSMENT_INPUTS_KEY, {
+    eventType: null,
     age: null,
     tenureYears: null,
     employmentInsuranceMonths: null,
     resignationReason: null,
+    regionSido: null,
+    regionSigungu: null,
+    disabledPerson: false,
+    singleParent: false,
+    basicLivelihoodRecipient: false,
+    nearPoverty: false,
   });
 }
 
-/** 백엔드 Gov24PublicBenefitService와 동일한 규칙(나이/근속연수 제약이 있는데 값이 없으면 판정 보류). */
+/** 진단 요청(payload)에서 데모 매칭 입력을 추출한다. boolean 특성은 미응답(undefined)을 false로 본다. */
+function toDemoInputs(payload: AssessmentCreateRequest): DemoAssessmentInputs {
+  return {
+    eventType: payload.eventType ?? null,
+    age: payload.age ?? null,
+    tenureYears: payload.tenureYears ?? null,
+    employmentInsuranceMonths: payload.employmentInsuranceMonths ?? null,
+    resignationReason: payload.resignationReason ?? null,
+    regionSido: payload.regionSido ?? null,
+    regionSigungu: payload.regionSigungu ?? null,
+    disabledPerson: payload.disabledPerson === true,
+    singleParent: payload.singleParent === true,
+    basicLivelihoodRecipient: payload.basicLivelihoodRecipient === true,
+    nearPoverty: payload.nearPoverty === true,
+  };
+}
+
+/** 카탈로그 항목 + 계산된 점수/보류필드를 화면용 PublicBenefit으로 변환한다. */
+function toDemoBenefit(
+  item: DemoCatalogItem,
+  score: number,
+  missing: string[],
+  situationKw: string[],
+): PublicBenefit {
+  const matched = item.keywords.find((k) => situationKw.includes(k)) ?? item.keywords[0];
+  const fitLevel: PublicBenefit["fitLevel"] =
+    score >= 82 ? "HIGH" : score >= 55 ? "NEEDS_CHECK" : "LOW";
+  const hasDeadline =
+    item.applicationDeadline != null &&
+    !["상시신청", "연중 모집"].includes(item.applicationDeadline);
+  const priorityGroup: PublicBenefit["priorityGroup"] = hasDeadline
+    ? "DEADLINE"
+    : item.benefitType === "CASH"
+      ? "TOP_MONEY"
+      : item.regionSido
+        ? "LOCAL"
+        : "NEEDS_INFO";
+  return {
+    title: item.title,
+    summary: item.summary,
+    provider: item.provider,
+    category: item.category,
+    applicationUrl: item.applicationUrl ?? null,
+    sourceId: `demo-${item.title}`,
+    matchedKeyword: matched,
+    reason: `'${matched}' 상황과 연결되는 공공서비스예요. 소득·거주지 조건을 확인해 보세요.`,
+    sourceLabel: "공공데이터포털 · 정부24 공공서비스 (데모)",
+    sourceType: "GOV24_API",
+    fitLevel,
+    priorityGroup,
+    supportTarget: item.supportTarget,
+    selectionCriteria: null,
+    supportContent: item.summary,
+    applicationMethod: null,
+    applicationDeadline: item.applicationDeadline ?? null,
+    contact: item.contact ?? null,
+    requiredDocuments: (item.requiredDocuments ?? []).map((name) => ({
+      documentName: name,
+      description: null,
+      issuer: null,
+      required: true,
+    })),
+    missingInputs: missing,
+    aiSummary: null,
+    relevanceScore: score,
+  };
+}
+
+/**
+ * 데모 카탈로그를 사용자 입력으로 매칭한다. 백엔드 Gov24PublicBenefitService와 동일한 규칙:
+ * 키워드 매칭 → 지역 불일치 제외 → 특성 전용 제외 → 나이/가입기간 제외 → 나이 미입력 시 보류(pending)
+ * → 점수 계산 → 관련도 내림차순 정렬.
+ */
 function buildDemoBenefits(inputs: DemoAssessmentInputs): {
   ranked: PublicBenefit[];
   pending: PublicBenefit[];
@@ -114,151 +440,61 @@ function buildDemoBenefits(inputs: DemoAssessmentInputs): {
   const isInvoluntary = Boolean(
     inputs.resignationReason && INVOLUNTARY_REASONS.includes(inputs.resignationReason),
   );
-  const ranked: PublicBenefit[] = [];
+  const situationKw = demoSituationKeywords(inputs);
+  const confirmed: PublicBenefit[] = [];
   const pending: PublicBenefit[] = [];
   const required = new Set<string>();
 
-  for (const b of DEMO_BENEFIT_MASTER) {
+  for (const item of DEMO_CATALOG) {
+    // 1) 키워드 매칭: 상황 키워드와 하나라도 겹쳐야 후보
+    if (!item.keywords.some((k) => situationKw.includes(k))) continue;
+    // 2) 지역 불일치 제외
+    if (demoRegionMismatch(item, inputs)) continue;
+    // 3) 특성 '전용' 혜택인데 해당자가 아니면 제외
+    if (item.requiresDisabled && !inputs.disabledPerson) continue;
+    if (item.requiresSingleParent && !inputs.singleParent) continue;
+    if (item.requiresBasicLivelihood && !inputs.basicLivelihoodRecipient) continue;
+    if (item.requiresNearPoverty && !inputs.nearPoverty && !inputs.basicLivelihoodRecipient) continue;
+    // 4) 고용보험 가입기간 미달 제외
     if (
+      item.minInsuranceMonths != null &&
       inputs.employmentInsuranceMonths != null &&
-      inputs.employmentInsuranceMonths < b.minInsuranceMonths
+      inputs.employmentInsuranceMonths < item.minInsuranceMonths
     ) {
       continue;
     }
-    if (b.isInvoluntarySub && !isInvoluntary) continue;
-
-    const ageConstrained = b.minAge > 0 || b.maxAge < 99;
-    const tenureConstrained = b.minTenureYears > 0;
+    // 5) 비자발적 이직 요건
+    if (item.isInvoluntarySub && !isInvoluntary) continue;
+    // 6) 나이: 값이 있으면 범위 밖 제외, 없으면 보류
+    const ageConstrained = item.minAge != null || item.maxAge != null;
+    if (ageConstrained && inputs.age != null) {
+      if (item.minAge != null && inputs.age < item.minAge) continue;
+      if (item.maxAge != null && inputs.age > item.maxAge) continue;
+    }
     const missing: string[] = [];
     if (ageConstrained && inputs.age == null) missing.push("age");
-    if (tenureConstrained && inputs.tenureYears == null) missing.push("tenureYears");
 
-    if (ageConstrained && inputs.age != null && (inputs.age < b.minAge || inputs.age > b.maxAge)) {
-      continue; // 확정적으로 대상이 아님
-    }
-    if (
-      tenureConstrained &&
-      inputs.tenureYears != null &&
-      inputs.tenureYears < b.minTenureYears
-    ) {
-      continue;
-    }
+    // 점수: 지역·특성·나이 정합 시 가점
+    let score = item.baseScore;
+    if (item.regionSido && item.regionSido === inputs.regionSido) score += 12;
+    if (item.requiresDisabled && inputs.disabledPerson) score += 10;
+    if (item.requiresSingleParent && inputs.singleParent) score += 10;
+    if (item.requiresBasicLivelihood && inputs.basicLivelihoodRecipient) score += 10;
+    if (item.requiresNearPoverty && (inputs.nearPoverty || inputs.basicLivelihoodRecipient)) score += 8;
+    if (ageConstrained && inputs.age != null) score += 6;
+    if (item.isInvoluntarySub && isInvoluntary) score += 8;
 
-    const benefit: PublicBenefit = {
-      title: b.title,
-      summary: null,
-      provider: "LIFT 큐레이션",
-      category: b.benefitType,
-      applicationUrl: null,
-      sourceId: `demo-db-${b.title}`,
-      matchedKeyword: "나이 조건 확인",
-      reason: "정형 조건(연령·가입기간·근속연수 등)에 부합해 확인이 필요한 혜택이에요.",
-      sourceLabel: "LIFT 큐레이션 데이터베이스",
-      sourceType: "DB",
-      fitLevel: "HIGH",
-      priorityGroup: b.benefitType === "CASH" ? "TOP_MONEY" : "NEEDS_INFO",
-      supportTarget: null,
-      selectionCriteria: null,
-      supportContent: null,
-      applicationMethod: null,
-      applicationDeadline: null,
-      contact: null,
-      requiredDocuments: b.requiredDocuments.map((name) => ({
-        documentName: name,
-        description: null,
-        issuer: null,
-        required: true,
-      })),
-      missingInputs: missing,
-      aiSummary: null,
-      relevanceScore: 90,
-    };
-
+    const benefit = toDemoBenefit(item, score, missing, situationKw);
     if (missing.length > 0) {
       pending.push(benefit);
       missing.forEach((m) => required.add(m));
     } else {
-      ranked.push(benefit);
+      confirmed.push(benefit);
     }
   }
 
-  const gov24Extras: PublicBenefit[] = [
-    {
-      title: "긴급복지 생계지원",
-      summary: "갑작스러운 실직으로 생계가 어려운 가구를 위한 지원 제도입니다.",
-      provider: "보건복지부",
-      category: "생계",
-      applicationUrl: "https://www.gov.kr",
-      sourceId: "demo-gov24-1",
-      matchedKeyword: "실직",
-      reason: "소득 공백과 가구 상황이 연결될 수 있어요.",
-      sourceLabel: "정부24 데모",
-      sourceType: "GOV24_API",
-      fitLevel: "NEEDS_CHECK",
-      priorityGroup: "TOP_MONEY",
-      supportTarget: "위기 상황에 처한 저소득 가구",
-      selectionCriteria: "소득·재산 기준 확인 필요",
-      supportContent: "생계비 등 단기 지원",
-      applicationMethod: "주민센터 문의",
-      applicationDeadline: null,
-      contact: "129",
-      requiredDocuments: [],
-      missingInputs: ["정확한 소득", "재산"],
-      aiSummary: "현재 정보만으로는 확인 필요지만, 실직 직후라면 우선 상담해볼 가치가 있어요.",
-      relevanceScore: 78,
-    },
-    {
-      title: "국민취업지원제도",
-      summary: "구직촉진수당과 취업지원서비스를 함께 제공하는 제도입니다.",
-      provider: "고용노동부",
-      category: "고용·창업",
-      applicationUrl: "https://www.work24.go.kr",
-      sourceId: "demo-gov24-2",
-      matchedKeyword: "구직",
-      reason: "'구직' 상황과 연결되는 공공서비스예요.",
-      sourceLabel: "정부24 데모",
-      sourceType: "GOV24_API",
-      fitLevel: "HIGH",
-      priorityGroup: "TOP_MONEY",
-      supportTarget: "저소득 구직자",
-      selectionCriteria: "소득·재산 기준 확인 필요",
-      supportContent: "월 구직촉진수당 지급",
-      applicationMethod: "고용센터 방문/온라인",
-      applicationDeadline: "상시신청",
-      contact: "1350",
-      requiredDocuments: [],
-      missingInputs: [],
-      aiSummary: "적극적으로 구직 중이라면 우선 검토해볼 만해요.",
-      relevanceScore: 82,
-    },
-    {
-      title: "내일배움카드 훈련장려금",
-      summary: "직업훈련 참여자에게 훈련장려금을 지원합니다.",
-      provider: "한국고용정보원",
-      category: "고용·창업",
-      applicationUrl: "https://www.hrd.go.kr",
-      sourceId: "demo-gov24-3",
-      matchedKeyword: "직업훈련",
-      reason: "'직업훈련' 상황과 연결되는 공공서비스예요.",
-      sourceLabel: "정부24 데모",
-      sourceType: "GOV24_API",
-      fitLevel: "NEEDS_CHECK",
-      priorityGroup: "NEEDS_INFO",
-      supportTarget: "직업훈련 참여자",
-      selectionCriteria: "출석률 등 훈련기관 기준 확인 필요",
-      supportContent: "훈련장려금 지급",
-      applicationMethod: "HRD-Net 온라인 신청",
-      applicationDeadline: "상시신청",
-      contact: "1350",
-      requiredDocuments: [],
-      missingInputs: [],
-      aiSummary: "훈련 과정을 등록하면 함께 신청할 수 있어요.",
-      relevanceScore: 70,
-    },
-  ];
-
   return {
-    ranked: [...ranked, ...gov24Extras].sort((a, b) => b.relevanceScore - a.relevanceScore),
+    ranked: confirmed.sort((a, b) => b.relevanceScore - a.relevanceScore),
     pending,
     requiredForMatching: Array.from(required),
   };
@@ -666,12 +902,7 @@ function reportFromAssessment(
     },
   ];
 
-  const inputs = saveAssessmentInputs({
-    age: payload.age ?? null,
-    tenureYears: payload.tenureYears ?? null,
-    employmentInsuranceMonths: payload.employmentInsuranceMonths ?? null,
-    resignationReason: payload.resignationReason ?? null,
-  });
+  const inputs = saveAssessmentInputs(toDemoInputs(payload));
   const { ranked, pending, requiredForMatching } = buildDemoBenefits(inputs);
 
   return {

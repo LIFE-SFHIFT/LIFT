@@ -129,3 +129,10 @@ UPDATE gov24_benefit_cache SET max_age = 24 WHERE external_id = '138300000052'; 
 UPDATE gov24_benefit_cache SET min_age = 65 WHERE external_id = '403000000147'; -- 노인 버스 무료승차 지원
 UPDATE gov24_benefit_cache SET min_age = 65 WHERE external_id = '393000000108'; -- 노인 목욕 및 이미용 바우처 사업 지원
 UPDATE gov24_benefit_cache SET min_age = 65 WHERE external_id = '358000000134'; -- 노인 보청기 지원 사업
+
+-- 개인정보 기반 정밀 매칭용 '전용(exclusive)' 자격 플래그 (Supabase와 동일).
+-- 원문(지원대상)에서 특정 그룹 전용인 경우만 표시. 여러 대상군 중 하나면 null 유지.
+UPDATE gov24_benefit_cache SET requires_disabled = true WHERE external_id IN ('142000000090','142100000014','142100000015','149200000032','149200000081','149200005019','303000000107','644000000221','999000000010');
+UPDATE gov24_benefit_cache SET requires_single_parent = true WHERE external_id IN ('138300000052','310000000119','314000000116','323000000111','569000000365','642000000700');
+UPDATE gov24_benefit_cache SET requires_basic_livelihood = true WHERE external_id IN ('307000000117','309000000135','315000000108','320000000112','321000000110','374000000145','393000000108','508000000681','B11005300003','O00005900002');
+UPDATE gov24_benefit_cache SET requires_near_poverty = true WHERE external_id IN ('303000000107','307000000110','333000000376','SBA000000100');
