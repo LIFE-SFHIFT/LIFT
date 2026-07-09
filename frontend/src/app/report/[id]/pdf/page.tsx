@@ -1,10 +1,16 @@
 "use client";
 
-import { Suspense, use, useEffect, useState } from "react";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ReportPdfDocument } from "@/components/ReportPdfDocument";
 import { api, ApiError } from "@/lib/api";
+import {
+  createPdfBlobFromElement,
+  openPdfFallbackWindow,
+  safePdfFilename,
+  savePdfBlob,
+} from "@/lib/pdfExport";
 import type { ReportDetail } from "@/lib/types";
 
 function parseWage(value: string | null): number | null {
@@ -49,9 +55,10 @@ function openInExternalBrowser(inApp: InAppBrowser) {
 function ReportPdfInner({ reportId }: { reportId: number }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const exportRef = useRef<HTMLDivElement>(null);
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [printing, setPrinting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [inAppBrowser, setInAppBrowser] = useState<InAppBrowser | null>(null);
   const monthlyAverageWage = parseWage(searchParams.get("monthlyAverageWage"));
 
@@ -81,22 +88,33 @@ function ReportPdfInner({ reportId }: { reportId: number }) {
     };
   }, [monthlyAverageWage, reportId]);
 
-  function handlePrint() {
+  async function handleSavePdf() {
     if (inAppBrowser) {
       openInExternalBrowser(inAppBrowser);
       return;
     }
-    setPrinting(true);
-    // afterprint로 정확히 복구하되, 지원하지 않는 브라우저 대비 타임아웃도 함께 둔다.
-    const reset = () => setPrinting(false);
-    window.addEventListener("afterprint", reset, { once: true });
-    const timer = window.setTimeout(reset, 1500);
+
+    const target = exportRef.current?.querySelector<HTMLElement>(".pdf-page");
+    if (!target || !report) {
+      setError("PDF로 저장할 리포트를 찾지 못했어요. 다시 시도해 주세요.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    const fallbackWindow = openPdfFallbackWindow();
     try {
-      window.print();
+      const blob = await createPdfBlobFromElement(target);
+      await savePdfBlob(
+        blob,
+        `${safePdfFilename(`LIFT_${report.summaryTitle}`, "LIFT_report")}.pdf`,
+        fallbackWindow,
+      );
     } catch {
-      window.clearTimeout(timer);
-      reset();
-      setError("이 브라우저는 인쇄를 지원하지 않아요. Chrome이나 Safari에서 열어주세요.");
+      fallbackWindow?.close();
+      setError("PDF 파일 저장에 실패했어요. Safari나 Chrome에서 다시 시도해 주세요.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -128,11 +146,14 @@ function ReportPdfInner({ reportId }: { reportId: number }) {
         <button type="button" className="btn secondary" onClick={() => router.back()}>
           이전으로
         </button>
-        <button type="button" className="btn" disabled={printing} onClick={handlePrint}>
-          {printing ? "준비 중…" : inAppBrowser ? "브라우저로 열어 PDF 저장" : "PDF 저장하기"}
+        <button type="button" className="btn" disabled={saving} onClick={handleSavePdf}>
+          {saving ? "PDF 준비 중…" : inAppBrowser ? "브라우저로 열어 PDF 저장" : "PDF 파일 저장"}
         </button>
       </div>
       <div className="pdf-preview-shell">
+        <ReportPdfDocument report={report} />
+      </div>
+      <div ref={exportRef} className="pdf-export-root" aria-hidden="true">
         <ReportPdfDocument report={report} />
       </div>
     </main>

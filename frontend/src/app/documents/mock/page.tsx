@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
+import { openPdfFallbackWindow, safePdfFilename, savePdfBlob } from "@/lib/pdfExport";
 
 const DOC_PROFILES: Record<
   string,
@@ -136,6 +137,31 @@ function safeFilename(value: string) {
   return value.replace(/[\\/:*?"<>|]/g, "_");
 }
 
+function filenameDate() {
+  const date = new Date();
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality?: number,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+        return;
+      }
+      reject(new Error("Canvas export failed."));
+    }, type, quality);
+  });
+}
+
 function wrapCanvasText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -210,7 +236,7 @@ function makePdfFromImage(imageBytes: Uint8Array, width: number, height: number)
   return new Blob(chunks, { type: "application/pdf" });
 }
 
-function downloadMockPdf({
+async function downloadMockPdf({
   profile,
   displayIssuer,
   source,
@@ -221,13 +247,17 @@ function downloadMockPdf({
   source: string;
   reportId: string;
 }) {
+  const fallbackWindow = openPdfFallbackWindow();
   const width = 1240;
   const height = 1754;
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) {
+    fallbackWindow?.close();
+    throw new Error("Canvas context is unavailable.");
+  }
 
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
@@ -331,20 +361,19 @@ function downloadMockPdf({
   ctx.font = "900 24px Apple SD Gothic Neo, Malgun Gothic, sans-serif";
   ctx.fillText("LIFT", 1090, 1676);
 
-  canvas.toBlob((blob) => {
-    if (!blob) return;
-    blob.arrayBuffer().then((buffer) => {
-      const pdf = makePdfFromImage(new Uint8Array(buffer), width, height);
-      const url = URL.createObjectURL(pdf);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${safeFilename(profile.title)}_${today().replace(/\\. /g, "-")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    });
-  }, "image/jpeg", 0.96);
+  try {
+    const blob = await canvasToBlob(canvas, "image/jpeg", 0.96);
+    const buffer = await blob.arrayBuffer();
+    const pdf = makePdfFromImage(new Uint8Array(buffer), width, height);
+    await savePdfBlob(
+      pdf,
+      `${safePdfFilename(safeFilename(profile.title), "LIFT_document")}_${filenameDate()}.pdf`,
+      fallbackWindow,
+    );
+  } catch (error) {
+    fallbackWindow?.close();
+    throw error;
+  }
 }
 
 function MockDocumentInner() {
@@ -355,6 +384,20 @@ function MockDocumentInner() {
   const reportId = searchParams.get("reportId") ?? "-";
   const profile = DOC_PROFILES[name] ?? fallbackProfile(name, issuer);
   const displayIssuer = issuer || profile.issuer;
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function handleSavePdf() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await downloadMockPdf({ profile, displayIssuer, source, reportId });
+    } catch {
+      setSaveError("PDF 파일 저장에 실패했어요. Safari나 Chrome에서 다시 시도해 주세요.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <AppShell showLogout wide>
@@ -368,11 +411,13 @@ function MockDocumentInner() {
             <button
               type="button"
               className="btn"
-              onClick={() => downloadMockPdf({ profile, displayIssuer, source, reportId })}
+              disabled={saving}
+              onClick={handleSavePdf}
             >
-              PDF로 저장
+              {saving ? "PDF 준비 중…" : "PDF로 저장"}
             </button>
           </div>
+          {saveError && <div className="error-box">{saveError}</div>}
 
           <article className="mock-doc-sheet">
             <header className="mock-doc-head">

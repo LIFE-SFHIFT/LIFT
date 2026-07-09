@@ -27,7 +27,7 @@ public class Gov24PublicServiceProperties {
 
     private int maxKeywords = 5;
 
-    private int maxResults = 6;
+    private int maxResults = 15;
 
     /** true면 매일 정부24 API를 조회해 DB를 UPSERT하는 스케줄러가 동작한다. 기본 off(수동/운영에서만 on). */
     private boolean syncEnabled = false;

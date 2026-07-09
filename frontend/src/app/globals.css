@@ -4376,6 +4376,31 @@ p.page-sub {
   box-shadow: 0 18px 50px rgba(16, 24, 40, 0.16);
 }
 
+.pdf-export-root {
+  position: fixed;
+  left: -12000px;
+  top: 0;
+  width: 794px;
+  background: #fff;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.pdf-export-root .pdf-doc {
+  display: block;
+  width: 794px;
+  max-width: 794px;
+}
+
+.pdf-export-root .pdf-page {
+  width: 794px;
+  min-height: auto;
+  padding: 18px;
+  background: #fff;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
 @media (max-width: 420px) {
   .pdf-choice-cards {
     grid-template-columns: 1fr;
@@ -4471,6 +4496,9 @@ p.page-sub {
     display: none !important;
   }
   nextjs-portal {
+    display: none !important;
+  }
+  .pdf-export-root {
     display: none !important;
   }
   .app-shell {

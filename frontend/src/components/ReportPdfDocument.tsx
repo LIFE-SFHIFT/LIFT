@@ -179,7 +179,7 @@ export function ReportPdfDocument({ report }: { report: ReportDetail }) {
   const saving = summarySaving(report);
   const topItems = report.items.slice(0, 3);
   const documents = uniqueDocuments(report.items).slice(0, 12);
-  const publicBenefits = (report.publicBenefits ?? []).slice(0, 4);
+  const publicBenefits = (report.publicBenefits ?? []).slice(0, 15);
   const hasPublicBenefits = publicBenefits.length > 0;
 
   return (

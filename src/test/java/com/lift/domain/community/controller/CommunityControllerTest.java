@@ -102,6 +102,25 @@ class CommunityControllerTest {
                 .andExpect(jsonPath("$.code").value("COMMON404_1"));
     }
 
+    @Test
+    void 댓글이_남아_있는_글도_삭제할_수_있다() throws Exception {
+        long postId = createPost();
+        long commentId = createComment(postId);
+
+        mockMvc.perform(authorized(get("/api/community/posts/" + postId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.commentCount").value(1))
+                .andExpect(jsonPath("$.result.comments[0].commentId").value((int) commentId));
+
+        mockMvc.perform(authorized(delete("/api/community/posts/" + postId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result").value(true));
+
+        mockMvc.perform(authorized(get("/api/community/posts/" + postId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("COMMON404_1"));
+    }
+
     private long createPost() throws Exception {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("category", "JOB_CHANGE");

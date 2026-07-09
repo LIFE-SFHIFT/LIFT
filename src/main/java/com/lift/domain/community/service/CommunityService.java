@@ -130,7 +130,9 @@ public class CommunityService {
             throw new ProjectException(GeneralErrorCode.FORBIDDEN);
         }
 
-        communityPostLikeRepository.deleteByPost_Id(post.getId());
+        Long deletePostId = post.getId();
+        communityPostLikeRepository.deleteByPost_Id(deletePostId);
+        communityCommentRepository.deleteByPost_Id(deletePostId);
         communityPostRepository.delete(post);
         return true;
     }
