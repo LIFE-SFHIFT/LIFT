@@ -3,6 +3,7 @@ package com.lift.domain.localnotice.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lift.domain.lifetransition.service.OpenAiProperties;
+import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -13,7 +14,6 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -42,15 +42,20 @@ public class LocalNoticeRelevanceJudgeService {
 
     private final RestClient.Builder restClientBuilder;
     private final OpenAiProperties properties;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ClientHttpRequestFactory requestFactory = createRequestFactory();
 
-    private static ClientHttpRequestFactory createRequestFactory() {
+    /** 타임아웃 고정 RestClient. 호출마다 새로 build하지 않고 한 번만 구성해 재사용한다. */
+    private RestClient restClient;
+
+    @PostConstruct
+    void init() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(15));
         factory.setReadTimeout(Duration.ofSeconds(60));
-        return factory;
+        this.restClient = restClientBuilder.requestFactory(factory).build();
     }
+
+    /** ObjectMapper는 Spring 자동 설정으로 Bean이 제공되므로, 호출할 때마다 새로 만들지 않는다. */
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public boolean isEnabled() {
         return properties.isAvailable();
@@ -66,7 +71,6 @@ public class LocalNoticeRelevanceJudgeService {
         }
 
         try {
-            RestClient restClient = restClientBuilder.requestFactory(requestFactory).build();
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("model", properties.getModel());
             payload.put("reasoning", Map.of("effort", "low"));

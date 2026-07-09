@@ -21,6 +21,7 @@ import type {
   PaymentCompleteRequest,
   PaymentResponse,
   ReportPdfEstimateRequest,
+  LocalNotice,
   ReportDetail,
   ReportPreview,
   TossPaymentConfirmRequest,
@@ -193,6 +194,18 @@ export const api = {
   getReport(reportId: number): Promise<ReportDetail> {
     if (isDemoSession()) return demoApi.getReport(reportId);
     return request<ReportDetail>(`/api/life/reports/${reportId}`);
+  },
+
+  /**
+   * 지자체 RSS 파이프라인이 확정한 지역 지원사업/장려금 조회. 공개(permitAll) 엔드포인트라
+   * 데모(비로그인) 사용자도 동일하게 실제 백엔드에서 받아온다(프론트 하드코딩 아님).
+   */
+  listLocalNotices(regionSido?: string | null, regionSigungu?: string | null): Promise<LocalNotice[]> {
+    const params = new URLSearchParams();
+    if (regionSido) params.set("regionSido", regionSido);
+    if (regionSigungu) params.set("regionSigungu", regionSigungu);
+    const query = params.toString();
+    return request<LocalNotice[]>(`/api/local-notices${query ? `?${query}` : ""}`);
   },
 
   getPdfReport(

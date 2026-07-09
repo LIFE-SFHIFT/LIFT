@@ -263,6 +263,25 @@ export interface PublicBenefit {
   relevanceScore: number;
 }
 
+/**
+ * 지자체 RSS 파이프라인이 확정한(ai_verdict=true) 지역 지원사업/장려금 공고.
+ * /api/local-notices 응답 1건. link/publishedAt이 있어 원문 공고로 추적 가능하다.
+ */
+export interface LocalNotice {
+  id: number;
+  regionSido: string | null;
+  regionSigungu: string | null;
+  title: string;
+  link: string | null;
+  summary: string | null;
+  publishedAt: string | null;
+  matchedKeyword: string | null;
+  category: string | null;
+  targetGroupSummary: string | null;
+  supportContentSummary: string | null;
+  reason: string | null;
+}
+
 export interface ReportDetail {
   reportId: number;
   assessmentId: number;

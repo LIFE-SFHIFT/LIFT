@@ -4233,6 +4233,24 @@ p.page-sub {
   color: var(--text-sub);
 }
 
+.pb-summary.clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pb-more {
+  margin-top: 4px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: #155eef;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .pb-action-meta {
   display: grid;
   gap: 5px;

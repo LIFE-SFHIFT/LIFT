@@ -143,6 +143,16 @@ function AssessmentInner() {
         singleParent,
         disabledPerson,
       });
+      // 리포트 화면에서 지역 공고(/api/local-notices)를 사용자 지역으로 좁히는 데 쓴다.
+      // 데모 저장소(lift.demo.*)와 별개로, 실제 로그인 사용자도 지역이 남도록 범용 키에 저장한다.
+      try {
+        localStorage.setItem(
+          "lift.assessmentRegion",
+          JSON.stringify({ regionSido, regionSigungu }),
+        );
+      } catch {
+        // localStorage를 못 쓰는 환경(사생활 모드 등)에서는 지역 필터만 생략된다.
+      }
       const preview = await api.analyze(assessment.assessmentId);
       router.push(`/report/${preview.reportId}/preview`);
     } catch (err) {

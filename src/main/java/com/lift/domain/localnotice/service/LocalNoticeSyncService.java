@@ -1,15 +1,16 @@
 package com.lift.domain.localnotice.service;
 
-import com.lift.domain.localnotice.model.LocalNoticeItem;
 import com.lift.domain.localnotice.model.LocalNoticeSource;
-import com.lift.domain.localnotice.repository.LocalNoticeItemRepository;
-import com.lift.domain.localnotice.repository.LocalNoticeSourceRepository;
 import com.lift.domain.localnotice.service.LocalNoticeFeedFetcher.FetchResult;
 import com.lift.domain.localnotice.service.LocalNoticeFeedFetcher.RawFeedItem;
 import com.lift.domain.localnotice.service.LocalNoticeRelevanceJudgeService.JudgeResult;
+import com.lift.domain.localnotice.service.LocalNoticeSyncPersistence.PendingItem;
+import com.lift.domain.localnotice.service.LocalNoticeSyncPersistence.PreparedFeedItem;
+import com.lift.domain.localnotice.service.LocalNoticeSyncPersistence.UpsertCounts;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
@@ -18,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 지자체 RSS 지원사업/장려금 공고를 주기적으로 동기화한다.
@@ -42,12 +42,11 @@ import org.springframework.transaction.annotation.Transactional;
 @ConditionalOnProperty(prefix = "lift.local-notice", name = "sync-enabled", havingValue = "true")
 public class LocalNoticeSyncService {
 
-    private final LocalNoticeSourceRepository sourceRepository;
-    private final LocalNoticeItemRepository itemRepository;
     private final LocalNoticeFeedFetcher feedFetcher;
     private final LocalNoticeTitleKeywordFilter keywordFilter;
     private final LocalNoticeRelevanceJudgeService judgeService;
     private final LocalNoticeProperties properties;
+    private final LocalNoticeSyncPersistence persistence;
 
     /** 등록된 소스별 polling(cron). 기본 매시 정각. */
     @Scheduled(cron = "${lift.local-notice.sync-cron:0 0 * * * *}")
@@ -59,10 +58,14 @@ public class LocalNoticeSyncService {
 
     /**
      * 동기화를 즉시 실행한다(수동 트리거/검증용). 결과 요약을 반환한다.
+     *
+     * <p>이 메서드 자체는 트랜잭션이 아니다 — RSS 폴링/OpenAI 판단 같은 네트워크 I/O를 트랜잭션 밖에서
+     * 수행하고, DB 반영은 {@link LocalNoticeSyncPersistence}의 짧은 트랜잭션 단위로 위임한다. 덕분에
+     * 스케줄러가 {@code this.syncNow()}로 자기호출해도(프록시 미경유) DB 쓰기가 정상 커밋되고,
+     * 긴 외부 호출이 DB 커넥션을 오래 붙잡지도 않는다.
      */
-    @Transactional
     public SyncResult syncNow() {
-        List<LocalNoticeSource> sources = sourceRepository.findByEnabledTrue();
+        List<LocalNoticeSource> sources = persistence.loadEnabledSources();
 
         int fetched = 0;
         int inserted = 0;
@@ -73,38 +76,26 @@ public class LocalNoticeSyncService {
         for (LocalNoticeSource source : sources) {
             FetchResult result = feedFetcher.fetch(source.getFeedUrl(), properties.getMaxFeedItemsPerSource());
             if (!result.success()) {
-                source.markFetchFailure(result.errorMessage());
+                persistence.markSourceFailure(source.getId(), result.errorMessage());
                 log.warn("RSS 소스 조회 실패. source={}, url={}, error={}",
                         source.getOrgName(), source.getFeedUrl(), result.errorMessage());
                 continue;
             }
-            source.markFetchSuccess();
 
+            List<PreparedFeedItem> prepared = new ArrayList<>(result.items().size());
             for (RawFeedItem raw : result.items()) {
                 fetched++;
                 String matchedKeyword = keywordFilter.matchKeyword(raw.title(), properties.getKeywords()).orElse(null);
                 if (matchedKeyword != null) {
                     candidates++;
                 }
-                String hash = contentHash(raw);
-
-                Optional<LocalNoticeItem> existing = itemRepository.findBySourceIdAndGuid(source.getId(), raw.guid());
-                if (existing.isEmpty()) {
-                    itemRepository.save(LocalNoticeItem.create(
-                            source, raw.guid(), raw.title(), raw.link(), raw.summary(), raw.publishedAt(),
-                            hash, matchedKeyword
-                    ));
-                    inserted++;
-                } else {
-                    LocalNoticeItem item = existing.get();
-                    if (hash.equals(item.getContentHash())) {
-                        unchanged++;
-                    } else {
-                        item.updateRawContent(raw.title(), raw.link(), raw.summary(), raw.publishedAt(), hash, matchedKeyword);
-                        updated++;
-                    }
-                }
+                prepared.add(new PreparedFeedItem(raw, contentHash(raw), matchedKeyword));
             }
+
+            UpsertCounts counts = persistence.persistSourceItems(source.getId(), prepared);
+            inserted += counts.inserted();
+            updated += counts.updated();
+            unchanged += counts.unchanged();
         }
 
         JudgeSummary judge = runJudging();
@@ -134,7 +125,7 @@ public class LocalNoticeSyncService {
             return new JudgeSummary(0, 0, properties.getMaxJudgeCallsTotal());
         }
 
-        long alreadyCalled = itemRepository.countByAiJudgedAtIsNotNull();
+        long alreadyCalled = persistence.countJudged();
         long totalBudget = Math.max(0, properties.getMaxJudgeCallsTotal());
         long remainingBudget = totalBudget - alreadyCalled;
         if (remainingBudget <= 0) {
@@ -144,31 +135,25 @@ public class LocalNoticeSyncService {
             return new JudgeSummary(0, 0, 0);
         }
 
-        List<LocalNoticeItem> pending = itemRepository.findByMatchedKeywordIsNotNullAndAiJudgedAtIsNull();
+        List<PendingItem> pending = persistence.loadPending();
         int limit = (int) Math.min(Math.max(1, properties.getMaxJudgeBatchSize()), remainingBudget);
 
         int judged = 0;
         int verifiedTrue = 0;
         int attempted = 0;
-        for (LocalNoticeItem item : pending) {
+        for (PendingItem item : pending) {
             if (attempted >= limit) {
                 break;
             }
             attempted++;
-            Optional<JudgeResult> verdict = judgeService.judge(item.getTitle(), item.getSummary());
+            Optional<JudgeResult> verdict = judgeService.judge(item.title(), item.summary());
             if (verdict.isEmpty()) {
                 // API 오류/크레딧 부족으로 판단 — 이 행은 미판단으로 남겨 다음 동기화에서 재시도.
                 // 시스템적 장애일 가능성이 높으므로 이번 실행에서는 추가 호출을 멈춘다.
                 break;
             }
             JudgeResult verdictResult = verdict.get();
-            item.applyAiVerdict(
-                    verdictResult.isLifecycleSupport(),
-                    verdictResult.category(),
-                    verdictResult.targetGroupSummary(),
-                    verdictResult.supportContentSummary(),
-                    verdictResult.reason()
-            );
+            persistence.applyVerdict(item.id(), verdictResult);
             judged++;
             if (verdictResult.isLifecycleSupport()) {
                 verifiedTrue++;

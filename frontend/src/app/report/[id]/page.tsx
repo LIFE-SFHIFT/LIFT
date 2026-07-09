@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
@@ -11,6 +11,7 @@ import { api, ApiError } from "@/lib/api";
 import { priorityLabel } from "@/lib/labels";
 import type {
   FetchedDocument,
+  LocalNotice,
   PriorityLevel,
   PublicBenefit,
   ReportDetail,
@@ -97,6 +98,87 @@ const REQUIRED_FIELD_LABEL: Record<string, string> = {
 
 function docKey(itemId: number, documentName: string) {
   return `${itemId}::${documentName}`;
+}
+
+/** 리포트에 함께 노출할 지역 공고 최대 개수. 한 시/도에 확정 공고가 많아도 리포트가 이걸로 도배되지 않게 한다. */
+const LOCAL_NOTICE_DISPLAY_LIMIT = 6;
+
+/**
+ * 진단 입력 시 저장해 둔 사용자 시/도·시군구. 지역 공고를 사용자 지역으로 좁히는 데 쓴다.
+ * 실제 로그인 사용자·데모 사용자 모두 지역이 남도록, 진단 생성 시 저장하는 범용 키(lift.assessmentRegion)를
+ * 먼저 보고, 없으면 데모 저장소(lift.demo.assessmentInputs)로 폴백한다. (예전엔 데모 키만 봐서 실사용자는
+ * 지역 필터가 아예 안 걸리고 전국 공고가 노출됐다.)
+ */
+function readAssessmentRegion(): { sido?: string; sigungu?: string } {
+  const pick = (key: string): { sido?: string; sigungu?: string } | null => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const v = JSON.parse(raw) as { regionSido?: string | null; regionSigungu?: string | null };
+      if (!v.regionSido && !v.regionSigungu) return null;
+      return { sido: v.regionSido ?? undefined, sigungu: v.regionSigungu ?? undefined };
+    } catch {
+      return null;
+    }
+  };
+  return pick("lift.assessmentRegion") ?? pick("lift.demo.assessmentInputs") ?? {};
+}
+
+/** 지역 공고 본문에 노출할 원문 길이 상한. 화면에선 3줄로 접히고(더보기), 펼쳐도 이 길이까지만 보여준다. */
+const LOCAL_NOTICE_BODY_MAX = 300;
+
+/** 너무 긴 텍스트를 max 근처의 단어 경계에서 자르고 말줄임표를 붙인다. */
+function clampText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  const trimmed = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut;
+  return `${trimmed.trimEnd()}…`;
+}
+
+/**
+ * 지역 공고 카드의 회색 본문. 원문(summary)이 있으면 너무 길지 않게 다듬어 그대로 쓰고(길면 카드에서 3줄로
+ * 접힌 뒤 더보기로 펼침), 원문이 업스트림 정제로 비어 있으면 AI가 뽑은 신청 대상 → 판단 근거 순으로 채운다.
+ * (예전엔 원문이 null인 공고에서 본문이 통째로 사라져 카드에 제목/지원 내용만 남았다.)
+ */
+function localNoticeBody(notice: LocalNotice): string | null {
+  const raw = notice.summary?.trim();
+  if (raw) return clampText(raw, LOCAL_NOTICE_BODY_MAX);
+  return notice.targetGroupSummary?.trim() || notice.reason?.trim() || null;
+}
+
+/**
+ * 지자체 RSS 파이프라인이 확정한 지역 공고(LocalNotice)를 화면 공용 혜택 카드(PublicBenefit) 형태로 변환한다.
+ * 값은 백엔드(/api/local-notices)에서 받은 것을 그대로 매핑할 뿐이며 프론트에서 지어내지 않는다.
+ */
+function toLocalNoticeBenefit(notice: LocalNotice): PublicBenefit {
+  const regionLabel = [notice.regionSido, notice.regionSigungu].filter(Boolean).join(" ");
+  return {
+    title: notice.title,
+    summary: localNoticeBody(notice),
+    provider: regionLabel || "지자체",
+    category: notice.category,
+    applicationUrl: notice.link,
+    sourceId: `local-notice-${notice.id}`,
+    matchedKeyword: notice.matchedKeyword ?? "",
+    reason: notice.reason ?? "지자체 게시판에서 수집·확정된 지역 지원사업/장려금입니다.",
+    sourceLabel: `${regionLabel || "지자체"} · 지자체 RSS`,
+    sourceType: "DB",
+    fitLevel: "NEEDS_CHECK",
+    priorityGroup: "LOCAL",
+    supportTarget: notice.targetGroupSummary,
+    selectionCriteria: null,
+    supportContent: notice.supportContentSummary,
+    applicationMethod: null,
+    applicationDeadline: null,
+    contact: null,
+    requiredDocuments: [],
+    missingInputs: [],
+    aiSummary: notice.supportContentSummary ?? notice.reason,
+    // 지역 공고는 정부24처럼 점수화된 매칭이 아니라 지역 필터로만 붙은 것이라 관련도 점수가 없다.
+    // 0(미채점)으로 두고, 아래 카드 렌더에서 점수 배지 자체를 숨긴다(근거 없는 "50점"을 표시하지 않기 위해).
+    relevanceScore: 0,
+  };
 }
 
 function verifiedStorageKey() {
@@ -220,6 +302,36 @@ function StepCard({
   );
 }
 
+/**
+ * 혜택 카드의 본문 요약. 기본은 3줄로 접어두고, 실제로 넘칠 때만 "더보기/접기" 버튼을 보여준다.
+ * 공공데이터 API 카드처럼 짧은 요약은 버튼이 뜨지 않고, 지자체 RSS 원문처럼 긴 설명만 접힌다.
+ */
+function ClampSummary({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [clampable, setClampable] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // 접힌(3줄 클램프) 상태에서 실제 내용이 넘치는지로 "더보기" 노출 여부를 판단한다.
+    setClampable(el.scrollHeight - el.clientHeight > 4);
+  }, [text]);
+
+  return (
+    <div className="pb-summary-wrap">
+      <p ref={ref} className={`pb-summary ${expanded ? "" : "clamp"}`}>
+        {text}
+      </p>
+      {(clampable || expanded) && (
+        <button type="button" className="pb-more" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "접기" : "더보기"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PublicBenefitSection({ benefits }: { benefits: PublicBenefit[] }) {
   if (!benefits.length) return null;
 
@@ -249,11 +361,14 @@ function PublicBenefitSection({ benefits }: { benefits: PublicBenefit[] }) {
                 {PUBLIC_FIT_LABEL[benefit.fitLevel]}
               </span>
               <span className="pb-group">{PUBLIC_GROUP_LABEL[benefit.priorityGroup]}</span>
-              <span className="pb-score">{benefit.relevanceScore}점</span>
+              {/* 지역 공고(local-notice-*)는 관련도 점수가 없어 배지를 숨긴다. 정부24 혜택만 실제 점수를 표시. */}
+              {!benefit.sourceId?.startsWith("local-notice-") && (
+                <span className="pb-score">{benefit.relevanceScore}점</span>
+              )}
             </div>
             <h3>{benefit.title}</h3>
             <p className="pb-reason">{benefit.aiSummary || benefit.reason}</p>
-            {benefit.summary && <p className="pb-summary">{benefit.summary}</p>}
+            {benefit.summary && <ClampSummary text={benefit.summary} />}
 
             {(benefit.applicationDeadline || benefit.applicationMethod) && (
               <div className="pb-action-meta">
@@ -499,9 +614,11 @@ function ReportInner({ reportId }: { reportId: number }) {
   }, [reportId]);
 
   useEffect(() => {
+    let cancelled = false;
     api
       .getReport(reportId)
       .catch((e) => {
+        if (cancelled) return null;
         if (e instanceof ApiError) {
           if (e.code === "LIFE403_2") {
             router.replace(`/report/${reportId}/preview`);
@@ -513,9 +630,31 @@ function ReportInner({ reportId }: { reportId: number }) {
         setError("리포트를 불러오지 못했어요.");
         return null;
       })
-      .then((data) => {
-        if (data) setReport(data);
+      .then(async (data) => {
+        if (!data || cancelled) return;
+        // 지자체 RSS 파이프라인이 확정한 지역 지원사업/장려금을 실제 백엔드에서 받아와 함께 노출한다.
+        // 사용자 시/도에 해당하는 것만, 최신순으로 일부만 붙인다(관련 없는 타 지역 공고가 리포트를 뒤덮지 않게).
+        // 공개(permitAll) 엔드포인트라 데모(비로그인)에서도 동일하게 동작하며, 조회 실패는 리포트 표시를 막지 않는다.
+        try {
+          const region = readAssessmentRegion();
+          const notices = await api.listLocalNotices(region.sido, region.sigungu);
+          if (notices.length) {
+            data = {
+              ...data,
+              publicBenefits: [
+                ...(data.publicBenefits ?? []),
+                ...notices.slice(0, LOCAL_NOTICE_DISPLAY_LIMIT).map(toLocalNoticeBenefit),
+              ],
+            };
+          }
+        } catch {
+          // 지역 공고 조회 실패는 무시(리포트 본문은 그대로 표시).
+        }
+        if (!cancelled) setReport(data);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [reportId, router]);
 
   useEffect(() => {

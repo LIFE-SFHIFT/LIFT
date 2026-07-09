@@ -52,10 +52,13 @@ public class SecurityConfig {
             // 로그인 사용자는 필터가 세팅한 Authentication으로 본인 계정에 귀속되고,
             // 비로그인(데모) 요청은 서비스에서 공유 데모 계정으로 저장된다.
             "/api/community/**",
-            // 지자체 RSS 공고 수집 파이프라인 파일럿 검증용 임시 엔드포인트.
-            // lift.local-notice.sync-enabled=true일 때만 컨트롤러 자체가 존재한다(운영 기본 off).
-            // 별도 관리자 권한 체계가 없어 임시로 permitAll — 운영 노출 시 인증/인가 추가 필요.
-            "/api/internal/local-notices/**"
+            // 지자체 RSS 파이프라인이 확정한 지역 지원사업/장려금 공개 조회(확정 공고만, 읽기 전용).
+            // 데모(비로그인) 사용자도 지역 혜택을 볼 수 있도록 커뮤니티 조회와 동일하게 허용한다.
+            "/api/local-notices/**"
+            // NOTE: 내부 파이프라인 트리거/덤프용 /api/internal/local-notices/** 는 여기에 넣지 않는다.
+            // 인증 없이 열면 외부인이 POST /sync 로 OpenAI 판단 호출(=비용)을 태울 수 있어,
+            // permitAll에서 제외해 anyRequest().authenticated() 로 떨어뜨린다(유효 토큰 필수).
+            // 관리자 롤이 생기면 그때 롤 기반 인가로 좁힌다.
     };
 
     @Bean
