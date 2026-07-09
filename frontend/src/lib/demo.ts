@@ -150,6 +150,85 @@ const DEMO_CATALOG: DemoCatalogItem[] = [
     baseScore: 68,
   },
   {
+    title: "광역구직활동비",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "직업안정기관 소개로 거주지에서 먼 지역에 구직활동을 하는 경우 교통비와 숙박료를 지원합니다.",
+    supportTarget: "구직급여 수급자 중 광역 구직활동을 한 사람",
+    benefitType: "CASH",
+    keywords: ["구직", "재취업", "취업", "고용"],
+    applicationDeadline: "광역구직활동 종료 후 14일 이내",
+    contact: "1350",
+    requiredDocuments: ["수급자격증", "구직활동 증빙"],
+    baseScore: 70,
+  },
+  {
+    title: "이주비 지원",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "취업 또는 직업훈련을 위해 주거를 이전하는 구직급여 수급자에게 이주 비용을 지원합니다.",
+    supportTarget: "직업안정기관 소개로 취업하거나 훈련을 받기 위해 이주한 구직급여 수급자",
+    benefitType: "CASH",
+    keywords: ["구직", "재취업", "취업", "직업훈련"],
+    applicationDeadline: "이주한 날부터 14일 이내",
+    contact: "1350",
+    requiredDocuments: ["수급자격증", "이주 사실 증빙"],
+    baseScore: 66,
+  },
+  {
+    title: "직업훈련 생계비 대부",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "직업훈련 참여 중 생계 부담이 있는 비정규직·전직실업자 등에게 생계비를 저리로 빌려줍니다.",
+    supportTarget: "직업훈련에 참여하는 전직실업자, 비정규직 근로자 등",
+    benefitType: "CASH",
+    keywords: ["직업훈련", "내일배움", "재취업", "구직", "생활안정"],
+    applicationDeadline: "예산 소진 시까지",
+    applicationUrl: "https://www.work24.go.kr",
+    contact: "1588-0075",
+    requiredDocuments: ["훈련수강 확인서", "소득 확인 서류"],
+    baseScore: 73,
+  },
+  {
+    title: "구직자 취업지원 서비스",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "구직자에게 일자리 정보, 직업지도, 채용행사, 동행면접 등 취업지원 서비스를 제공합니다.",
+    supportTarget: "취업을 희망하는 구직자",
+    benefitType: "SERVICE",
+    keywords: ["구직", "취업", "재취업", "고용", "일자리"],
+    applicationDeadline: "상시신청",
+    applicationUrl: "https://www.work24.go.kr",
+    contact: "1350",
+    baseScore: 69,
+  },
+  {
+    title: "취업특강 및 집단상담 프로그램",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "이력서, 면접, 직업탐색 등 재취업 준비에 필요한 교육과 상담 프로그램을 제공합니다.",
+    supportTarget: "재취업을 준비하는 구직자",
+    benefitType: "SERVICE",
+    keywords: ["구직", "취업", "재취업", "직업훈련", "고용"],
+    applicationDeadline: "고용센터별 상이",
+    applicationUrl: "https://www.work24.go.kr",
+    contact: "1350",
+    baseScore: 64,
+  },
+  {
+    title: "온라인 청년센터 취업상담",
+    provider: "고용노동부",
+    category: "고용·창업",
+    summary: "청년 구직자에게 정책 안내와 취업 상담을 온라인으로 제공합니다.",
+    supportTarget: "취업을 준비하는 청년",
+    benefitType: "SERVICE",
+    keywords: ["청년", "취업", "구직", "고용", "일자리"],
+    minAge: 15,
+    maxAge: 39,
+    applicationDeadline: "상시신청",
+    baseScore: 67,
+  },
+  {
     title: "청년 일자리 도약 장려금",
     provider: "고용노동부",
     category: "고용·창업",
@@ -174,6 +253,43 @@ const DEMO_CATALOG: DemoCatalogItem[] = [
     applicationDeadline: "상시신청",
     contact: "129",
     baseScore: 76,
+  },
+  {
+    title: "긴급복지 주거지원",
+    provider: "보건복지부",
+    category: "생활안정",
+    summary: "위기상황으로 주거가 불안정한 가구에 임시거소 또는 주거비를 지원합니다.",
+    supportTarget: "실직 등 위기사유로 주거 지원이 필요한 가구",
+    benefitType: "CASH",
+    keywords: ["긴급복지", "생활안정", "생계", "주거", "실업"],
+    applicationDeadline: "상시신청",
+    contact: "129",
+    baseScore: 71,
+  },
+  {
+    title: "긴급복지 의료지원",
+    provider: "보건복지부",
+    category: "생활안정",
+    summary: "갑작스러운 질병이나 부상으로 의료비 부담이 큰 위기가구에 의료비를 지원합니다.",
+    supportTarget: "위기사유와 소득·재산 기준을 충족하는 가구",
+    benefitType: "SERVICE",
+    keywords: ["긴급복지", "생활안정", "생계", "실업"],
+    applicationDeadline: "상시신청",
+    contact: "129",
+    baseScore: 62,
+  },
+  {
+    title: "서민금융 소액생계비대출",
+    provider: "서민금융진흥원",
+    category: "생활안정",
+    summary: "긴급한 생계비가 필요한 취약계층에게 소액 대출 상담과 지원을 제공합니다.",
+    supportTarget: "소득·신용 조건 확인이 필요한 금융 취약계층",
+    benefitType: "CASH",
+    keywords: ["생활안정", "생계", "실업", "구직"],
+    applicationDeadline: "상시상담",
+    applicationUrl: "https://www.kinfa.or.kr",
+    contact: "1397",
+    baseScore: 58,
   },
   // ── 전국 · 고령 ──
   {
@@ -543,6 +659,17 @@ function buildDemoBenefits(inputs: DemoAssessmentInputs): {
     ranked: confirmed.sort((a, b) => b.relevanceScore - a.relevanceScore),
     pending,
     requiredForMatching: Array.from(required),
+  };
+}
+
+function refreshDemoBenefitRecommendations(report: ReportDetail): ReportDetail {
+  const inputs = readAssessmentInputs();
+  const { ranked, pending, requiredForMatching } = buildDemoBenefits(inputs);
+  return {
+    ...report,
+    publicBenefits: ranked,
+    pendingBenefits: pending,
+    requiredForMatching,
   };
 }
 
@@ -1188,11 +1315,11 @@ export const demoApi = {
   },
 
   getReport(_reportId: number): Promise<ReportDetail> {
-    return Promise.resolve(requireReport());
+    return Promise.resolve(saveReport(refreshDemoBenefitRecommendations(requireReport())));
   },
 
   getPdfReport(_reportId: number, payload: ReportPdfEstimateRequest): Promise<ReportDetail> {
-    const base = requireReport();
+    const base = saveReport(refreshDemoBenefitRecommendations(requireReport()));
     if (!base.pdfAvailable) {
       throw new Error("리포트 결제 후 이용할 수 있습니다.");
     }
